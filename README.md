@@ -18,6 +18,7 @@ python3 -B scripts/package_skill.py
 
 按[安装说明](docs/skill.md)将 ZIP 解压到项目的 `.agents/skills/`。开启新会话后，在 Codex 使用 `$worklog`，在 OpenCode 使用 `@worklog`，再说明项目路径和任务编号。
 
+- [用户指南](docs/user-guide.md)
 - [安装与复跑说明](docs/skill.md)
 - [CLI 调用与输入输出](docs/cli.md)
 - [公开只读协议 1.0](docs/read-protocol.md)
