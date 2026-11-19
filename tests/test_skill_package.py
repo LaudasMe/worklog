@@ -26,15 +26,19 @@ class SkillPackageTest(unittest.TestCase):
     def test_package_reproducible_and_only_contains_tracked_runtime_sources(self):
         first = self.build(self.directory / "first")
         second = self.build(self.directory / "second")
-        self.assertEqual(first.name, "worklog-skill-v0.1.0.zip")
+        self.assertEqual(first.name, "worklog-skill-context-candidate.zip")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         expected = {
             "worklog/SKILL.md": "skills/worklog/SKILL.md",
             "worklog/INSTALL.md": "docs/skill.md",
             "worklog/references/commands.md": "skills/worklog/references/commands.md",
             "worklog/scripts/schema.sql": "schema.sql",
+            "worklog/scripts/schema_context.sql": "schema_context.sql",
             "worklog/scripts/worklog.py": "worklog.py",
             "worklog/scripts/worklog_store.py": "worklog_store.py",
+            "worklog/scripts/worklog_context.py": "worklog_context.py",
+            "worklog/scripts/worklog_summaries.py": "worklog_summaries.py",
+            "worklog/scripts/worklog_upgrade.py": "worklog_upgrade.py",
         }
         with ZipFile(first) as archive:
             self.assertIsNone(archive.testzip())
@@ -50,11 +54,13 @@ class SkillPackageTest(unittest.TestCase):
             archive.extractall(installed)
         cli = installed / "worklog/scripts/worklog.py"
 
-        def call(command, *args, request=None):
+        def call(command, *args, request=None, from_project=False):
             encoded = json.dumps(request, ensure_ascii=False).encode("utf-8")
+            project_args = [] if from_project else ["--project", str(project)]
             result = subprocess.run(
-                [sys.executable, "-B", str(cli), "--project", str(project), command, *args],
-                cwd=self.directory, input=encoded, capture_output=True, timeout=15, check=False,
+                [sys.executable, "-B", str(cli), *project_args, command, *args],
+                cwd=project if from_project else self.directory,
+                input=encoded, capture_output=True, timeout=15, check=False,
             )
             self.assertEqual(result.stderr, b"")
             return result.returncode, json.loads(result.stdout)
@@ -77,3 +83,9 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual(task["protocol_version"], "1.0")
         self.assertEqual(task["result"], receipt["result"]["task"])
         self.assertEqual(call("snapshot")[1]["result"]["watermark"], 1)
+        status, context = call("context", "--task", "T001", from_project=True)
+        self.assertEqual(status, 0)
+        self.assertEqual(context["result"]["task"]["task_id"], task["result"]["task_id"])
+        status, summaries = call("summaries", "--type", "task", "--status", "TODO", from_project=True)
+        self.assertEqual(status, 0)
+        self.assertEqual([row["number"] for row in summaries["result"]["items"]], ["T001"])

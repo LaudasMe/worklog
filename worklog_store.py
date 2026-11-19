@@ -12,7 +12,10 @@ import tempfile
 from uuid import uuid4
 
 PROTOCOL_VERSION = "1.0"
-SCHEMA_VERSION = 1
+CONTEXT_VERSION = "1.0"
+KINDS = ("GOAL", "CONSTRAINT", "DECISION", "DOCUMENT", "PROGRESS", "QUESTION", "TODO", "BLOCKER")
+LEGACY_SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CAPABILITIES = ["identity", "task-get", "snapshot", "changes", "entry-get"]
 MAX_SEQUENCE = 2**63 - 1
 ENTRY_FIELDS = (
@@ -55,8 +58,20 @@ def connect(path, mode):
     return db
 
 
+def schema_version(db):
+    return db.execute("PRAGMA user_version").fetchone()[0]
+
+
+def context_supported(db):
+    return schema_version(db) == SCHEMA_VERSION
+
+
+def origin(command, key):
+    return {"command": command, "id": key}
+
+
 def metadata(db):
-    if db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+    if schema_version(db) not in (LEGACY_SCHEMA_VERSION, SCHEMA_VERSION):
         raise WorklogError("unsupported_schema", "Unsupported workLog database schema.")
     project = db.execute("SELECT project_id, data_generation, name FROM project").fetchone()
     if project is None:
@@ -95,12 +110,13 @@ def initialize(path, request):
     path.parent.mkdir(mode=0o700, exist_ok=True)
     if not path.is_file():
         schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
+        context_schema = Path(__file__).with_name("schema_context.sql").read_text(encoding="utf-8")
         fd, filename = tempfile.mkstemp(prefix=".init-", dir=path.parent)
         os.close(fd)
         temporary = Path(filename)
         try:
             with closing(connect(temporary, "rw")) as db:
-                db.executescript("BEGIN IMMEDIATE;\n" + schema)
+                db.executescript("BEGIN IMMEDIATE;\n" + schema + context_schema)
                 db.execute("INSERT INTO project VALUES (1, ?, ?, ?)", (uid(), uid(), name))
                 db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 db.commit()
@@ -230,6 +246,10 @@ def write_request(db, project, command, request):
         if prior["request_hash"] != digest:
             raise WorklogError("operation_conflict", "Operation ID already belongs to a different request.")
         return change_view(prior)
+    if schema_version(db) == SCHEMA_VERSION and db.execute(
+        "SELECT 1 FROM context_operations WHERE operation_id = ?", (operation,)
+    ).fetchone():
+        raise WorklogError("operation_conflict", "Operation ID already belongs to a context request.")
 
     at = timestamp()
     if command == "task-create":

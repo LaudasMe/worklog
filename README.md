@@ -1,20 +1,20 @@
 # workLog
 
-workLog 帮你在 Codex 和 OpenCode 之间接着做同一个项目。你可以在 Codex 记下做到哪里，之后到 OpenCode 读回进展和下一步，再接手同一条任务。
+workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做一个项目。会话可以从项目目录找到任务，读回目标、决定、进展和待办，完成工作后把结果记下来。
 
 你可以新建任务、查看进展、接手、记录 Markdown 原文，也可以把任务交给下一个会话。每个项目各有一个数据库，放在自己的 `.worklog/` 目录里。
 
 ## 第一次使用
 
-1. 准备 Python 3.9 或以上。有安装 ZIP 就直接解压，也可以从 [v0.1.0 源码](https://github.com/LaudasMe/worklog/tree/v0.1.0) 运行 `python3 -B scripts/package_skill.py` 生成 ZIP。
-2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。
-3. 开一个新会话。Codex 用 `$worklog`，OpenCode 用 `@worklog`。告诉它项目路径和你要做的事。
+1. 准备 Python 3.9 或以上。用当前源码运行 `python3 -B scripts/package_skill.py` 构建上下文候选版 ZIP。
+2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。已有 v0.1.0 项目可先查询，在首次写入上下文前按[备份与升级步骤](docs/context-cli.md#备份和升级)升级。
+3. 从项目根目录开一个新会话，加载 `worklog` Skill 后说「找出当前项目还在处理的任务，读一下上下文，告诉我下一步」。
 
-[用户指南](docs/user-guide.md)有完整例子，从创建 T001 到换一个客户端继续处理。
+[用户指南](docs/user-guide.md)包含新会话读取、写回和复查，以及从创建 T001 到跨客户端接手的完整示例。上一版仍可从 [v0.1.0 标签](https://github.com/LaudasMe/worklog/tree/v0.1.0)获取。
 
 ## 从命令行使用
 
-[CLI 说明](docs/cli.md)提供可运行的命令和常见错误的处理方法。[只读接口说明](docs/read-protocol.md)适合要在其他工具里显示任务和进展的人。
+[上下文 CLI](docs/context-cli.md)介绍任务摘要、项目与任务上下文、批量写回和旧库升级。[CLI 说明](docs/cli.md)介绍原有任务和交接流程。[只读接口 1.0](docs/read-protocol.md)继续提供快照、增量和历史原文查询。
 
 ## 运行测试
 
@@ -22,6 +22,6 @@ workLog 帮你在 Codex 和 OpenCode 之间接着做同一个项目。你可以�
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-测试用临时项目检查安装包、跨目录接力、项目之间的数据隔离和只读查询。
+请在保留 `v0.1.0` 标签的 Git 克隆中运行测试。测试用旧版源码生成临时数据库，检查升级与回滚、上下文和批量写回、公开只读协议、跨目录接力、项目隔离和 ZIP 构建。上下文候选版也已在实际 Codex 和 OpenCode 新会话中验证 Skill 加载和只读查询，并在两个独立 Codex 会话中验证写回与复查。
 
 许可证见 [LICENSE](LICENSE)。

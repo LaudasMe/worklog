@@ -10,7 +10,7 @@
 python3 -B scripts/package_skill.py
 ```
 
-生成的文件在 `dist/worklog-skill-v0.1.0.zip`。
+当前源码生成 `dist/worklog-skill-context-candidate.zip`。用 v0.1.0 标签构建时，文件名为 `worklog-skill-v0.1.0.zip`。
 
 ## 选择安装位置
 
@@ -23,7 +23,7 @@ python3 -B scripts/package_skill.py
 下方用 Codex 的本机目录举例。把 `SKILL_ZIP` 换成 ZIP 的实际路径。给 OpenCode 安装时，把 `SKILLS_DIR` 换成 `"$HOME/.config/opencode/skills"`。
 
 ```sh
-SKILL_ZIP="/path/to/worklog-skill-v0.1.0.zip"
+SKILL_ZIP="/path/to/worklog-skill-context-candidate.zip"
 SKILLS_DIR="$HOME/.agents/skills"
 mkdir -p "$SKILLS_DIR"
 test ! -e "$SKILLS_DIR/worklog" &&
@@ -35,16 +35,20 @@ test ! -e "$SKILLS_DIR/worklog" &&
 
 ## 试一下
 
-开一个客户端新会话。Codex 用 `$worklog`，OpenCode 用 `@worklog`。
+开一个客户端新会话。Codex 用 Skill 选择器选择 `worklog`，OpenCode 可直接请它用原生 `skill` 工具加载 `worklog`。如果同一台机器有多个安装位置，先核对客户端实际加载的 Skill 路径。
 
 > `$worklog` 初始化 `<项目根目录>` 的 workLog，项目名称为「示例项目」。建一个任务「核对订单合计」。
 
 > `@worklog` 查看 `<项目根目录>` 的 T001。告诉我当前阶段和下一步。
+
+从项目根目录开的新会话可以直接说「用 workLog 列出当前项目的任务，读取项目和任务上下文」。从其他目录启动时，补充项目绝对路径。
 
 把 `<项目根目录>` 换成已有项目文件夹的完整路径，把「示例项目」改成你的项目名。想验证交接，可以在 Codex 接手、记一条进展并交接，然后在 OpenCode 新会话查看原文并接手。要验证项目之间的数据隔离，可以用两个有不同标题的 T001，按路径分别查询。
 
 ## 更新或移除
 
 更新时可以先把新版本解压到临时目录，再用其中的 `worklog/` 替换已有安装目录，随后开一个新会话。移除时删除安装的 `worklog/` 目录即可。任务和进展保存在各项目的 `.worklog/` 里。
+
+如果项目库来自 v0.1.0，可以先用候选版查询。首次写入上下文前，用候选版 CLI 运行 `backup --output <备份文件>`，再运行 `upgrade --backup <备份文件>`。数据库备份和升级按项目执行。
 
 安装目录中的 `references/commands.md` 有命令参数和 JSON 示例。

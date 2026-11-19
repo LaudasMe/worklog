@@ -8,14 +8,18 @@ from tempfile import NamedTemporaryFile
 from zipfile import ZipFile, ZipInfo, ZIP_STORED
 
 ROOT = Path(__file__).resolve().parents[1]
-FILENAME = "worklog-skill-v0.1.0.zip"
+FILENAME = "worklog-skill-context-candidate.zip"
 FILES = (
     ("worklog/SKILL.md", "skills/worklog/SKILL.md"),
     ("worklog/INSTALL.md", "docs/skill.md"),
     ("worklog/references/commands.md", "skills/worklog/references/commands.md"),
     ("worklog/scripts/schema.sql", "schema.sql"),
+    ("worklog/scripts/schema_context.sql", "schema_context.sql"),
     ("worklog/scripts/worklog.py", "worklog.py"),
     ("worklog/scripts/worklog_store.py", "worklog_store.py"),
+    ("worklog/scripts/worklog_context.py", "worklog_context.py"),
+    ("worklog/scripts/worklog_summaries.py", "worklog_summaries.py"),
+    ("worklog/scripts/worklog_upgrade.py", "worklog_upgrade.py"),
 )
 
 

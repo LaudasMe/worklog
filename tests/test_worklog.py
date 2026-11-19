@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import worklog
 import worklog_store as store
+from test_context import LEGACY, invoke, source_at
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "worklog.py"
@@ -45,6 +46,17 @@ class ProjectCase(unittest.TestCase):
 
     def initialize(self, project=None):
         return self.call("init", data={"name": "合成项目"}, project=project)
+
+    def upgraded_legacy_database(self):
+        cli = source_at(LEGACY, self.root / "v0.1.0")
+        code, legacy = invoke(cli, self.project, "--project", str(self.project), "init",
+                              data={"name": "合成项目"})
+        self.assertEqual(code, 0, legacy)
+        backup = self.root / "legacy.sqlite3"
+        self.call("backup", "--output", str(backup))
+        self.call("upgrade", "--backup", str(backup))
+        self.assertEqual(self.call("identity"), legacy)
+        return legacy
 
     def request(self, identity, operation, task=None, **fields):
         request = {key: identity[key] for key in ("project_id", "data_generation")}
@@ -212,7 +224,7 @@ class ProjectCase(unittest.TestCase):
         self.call("task-create", data=body, code=6, error="unsupported_schema")
 
     def test_snapshot_writer_attempts_to_commit_between_watermark_and_rows(self):
-        identity = self.initialize()
+        identity = self.upgraded_legacy_database()
         task = self.create(identity)
         request = self.request(identity, "racing-create", title="边界写入")
         transactions = []
@@ -275,7 +287,7 @@ sys.exit(worklog.main())
         self.assertEqual(self.call("snapshot")["result"]["watermark"], 2)
 
     def test_cli_only_reader_reconstructs_state_and_replays_duplicate_pages(self):
-        identity = self.initialize()
+        identity = self.upgraded_legacy_database()
         task = self.claim(identity, self.create(identity))
         first = self.call("checkpoint", data=self.record(identity, task, "progress-a", "progress"))
         baseline = self.call("snapshot")
