@@ -4,11 +4,13 @@
 
 在安装 Python 3.9 或以上的本机上，保留同一版本的 `worklog.py`、`worklog_store.py` 和 `schema.sql`。标准库提供 SQLite 支持。创建一个项目目录后，用绝对路径调用 CLI。多个客户端可从各自目录指定同一个项目根。`init` 是显式操作，每个实际项目应分别初始化。
 
+下面的示例用 `mktemp -d` 创建临时目录，并在该目录下创建 `.worklog/worklog.sqlite3`。实际使用时，将 `PROJECT` 设为你已有的项目目录的绝对路径，并把 JSON 中的 `name` 改成自己的项目名称。
+
 ```sh
 WORKLOG_REPO="/path/to/workLog"
 PROJECT="$(mktemp -d)"
 CLI="$WORKLOG_REPO/worklog.py"
-printf '%s\n' '{"name":"北辰合成项目"}' | python3 "$CLI" --project "$PROJECT" init
+printf '%s\n' '{"name":"示例项目"}' | python3 "$CLI" --project "$PROJECT" init
 python3 "$CLI" --project "$PROJECT" identity
 python3 "$CLI" --version
 ```
