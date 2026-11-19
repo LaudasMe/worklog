@@ -8,7 +8,7 @@ from tempfile import NamedTemporaryFile
 from zipfile import ZipFile, ZipInfo, ZIP_STORED
 
 ROOT = Path(__file__).resolve().parents[1]
-FILENAME = "worklog-skill-context-candidate.zip"
+FILENAME = "worklog-skill-v0.2.0.zip"
 FILES = (
     ("worklog/SKILL.md", "skills/worklog/SKILL.md"),
     ("worklog/INSTALL.md", "docs/skill.md"),

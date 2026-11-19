@@ -13,7 +13,7 @@ python3 -B "$CLI" upgrade --backup /absolute/backup/worklog-v1.sqlite3
 - `backup` 使用 SQLite 在线备份，在临时文件中完成完整性和外键检查，再发布到指定路径。输出目录须已存在，目标文件须不存在。
 - `upgrade` 在写事务内验证备份与当前 schema 1 的逻辑数据一致，再增加上下文存储并将内部 schema 升为 2。期间有旧版写入时，重新备份再试。失败会回滚，备份保留。新建项目直接使用 schema 2。
 - 升级前新版可以查询旧项目、任务和历史。新版 `record` 在 schema 1 返回 `upgrade_required`。未初始化目录的只读命令返回 `not_initialized`，不创建数据。
-- 原项目身份、数据代次、原接手、任务、历史及幂等回执保持一致。升级后使用候选版 CLI 或 Skill。协议 1.0 的消费者可保持原调用。
+- 原项目身份、数据代次、原接手、任务、历史及幂等回执保持一致。升级后使用 v0.2.0 CLI 或 Skill。协议 1.0 的消费者可保持原调用。
 
 ## 读取
 

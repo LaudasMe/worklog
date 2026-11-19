@@ -6,7 +6,7 @@ workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做
 
 ## 第一次使用
 
-1. 准备 Python 3.9 或以上。用当前源码运行 `python3 -B scripts/package_skill.py` 构建上下文候选版 ZIP。
+1. 准备 Python 3.9 或以上。从 [v0.2.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.2.0) 下载 Skill ZIP，也可以在 v0.2.0 源码目录运行 `python3 -B scripts/package_skill.py` 构建。
 2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。已有 v0.1.0 项目可先查询，在首次写入上下文前按[备份与升级步骤](docs/context-cli.md#备份和升级)升级。
 3. 从项目根目录开一个新会话，加载 `worklog` Skill 后说「找出当前项目还在处理的任务，读一下上下文，告诉我下一步」。
 
@@ -22,6 +22,6 @@ workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-请在保留 `v0.1.0` 标签的 Git 克隆中运行测试。测试用旧版源码生成临时数据库，检查升级与回滚、上下文和批量写回、公开只读协议、跨目录接力、项目隔离和 ZIP 构建。上下文候选版也已在实际 Codex 和 OpenCode 新会话中验证 Skill 加载和只读查询，并在两个独立 Codex 会话中验证写回与复查。
+请在保留 `v0.1.0` 标签的 Git 克隆中运行测试。测试用旧版源码生成临时数据库，检查升级与回滚、上下文和批量写回、公开只读协议、跨目录接力、项目隔离和 ZIP 构建。这些上下文功能也已在实际 Codex 和 OpenCode 新会话中验证 Skill 加载和只读查询，并在两个独立 Codex 会话中验证写回与复查。
 
 许可证见 [LICENSE](LICENSE)。

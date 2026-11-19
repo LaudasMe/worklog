@@ -26,7 +26,7 @@ class SkillPackageTest(unittest.TestCase):
     def test_package_reproducible_and_only_contains_tracked_runtime_sources(self):
         first = self.build(self.directory / "first")
         second = self.build(self.directory / "second")
-        self.assertEqual(first.name, "worklog-skill-context-candidate.zip")
+        self.assertEqual(first.name, "worklog-skill-v0.2.0.zip")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         expected = {
             "worklog/SKILL.md": "skills/worklog/SKILL.md",

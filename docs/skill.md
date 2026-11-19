@@ -4,13 +4,13 @@
 
 ## 准备 ZIP
 
-有安装包时可以直接使用。从 workLog 源码目录运行下面的命令可生成安装包。
+从 [v0.2.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.2.0) 下载 `worklog-skill-v0.2.0.zip` 和 `SHA256SUMS`。两个文件放在同一目录后，可运行 `shasum -a 256 -c SHA256SUMS` 校验。也可以从 v0.2.0 源码目录运行下面的命令构建安装包。
 
 ```sh
 python3 -B scripts/package_skill.py
 ```
 
-当前源码生成 `dist/worklog-skill-context-candidate.zip`。用 v0.1.0 标签构建时，文件名为 `worklog-skill-v0.1.0.zip`。
+构建产生 `dist/worklog-skill-v0.2.0.zip`。
 
 ## 选择安装位置
 
@@ -23,7 +23,7 @@ python3 -B scripts/package_skill.py
 下方用 Codex 的本机目录举例。把 `SKILL_ZIP` 换成 ZIP 的实际路径。给 OpenCode 安装时，把 `SKILLS_DIR` 换成 `"$HOME/.config/opencode/skills"`。
 
 ```sh
-SKILL_ZIP="/path/to/worklog-skill-context-candidate.zip"
+SKILL_ZIP="/path/to/worklog-skill-v0.2.0.zip"
 SKILLS_DIR="$HOME/.agents/skills"
 mkdir -p "$SKILLS_DIR"
 test ! -e "$SKILLS_DIR/worklog" &&
@@ -49,6 +49,6 @@ test ! -e "$SKILLS_DIR/worklog" &&
 
 更新时可以先把新版本解压到临时目录，再用其中的 `worklog/` 替换已有安装目录，随后开一个新会话。移除时删除安装的 `worklog/` 目录即可。任务和进展保存在各项目的 `.worklog/` 里。
 
-如果项目库来自 v0.1.0，可以先用候选版查询。首次写入上下文前，用候选版 CLI 运行 `backup --output <备份文件>`，再运行 `upgrade --backup <备份文件>`。数据库备份和升级按项目执行。
+如果项目库来自 v0.1.0，可以先用 v0.2.0 查询。首次写入上下文前，用 v0.2.0 CLI 运行 `backup --output <备份文件>`，再运行 `upgrade --backup <备份文件>`。数据库备份和升级按项目执行。
 
 安装目录中的 `references/commands.md` 有命令参数和 JSON 示例。
