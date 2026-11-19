@@ -1,37 +1,47 @@
-# workLog 公开只读协议 1.0
+# 只读接口说明 1.0
 
-本地进程调用 `python3 <workLog>/worklog.py --project <项目根> <命令>`。每次调用产生一条 UTF-8 JSON。成功结果包含 `ok: true`、`protocol_version: "1.0"`、`project_id`、`data_generation` 和 `result`。失败格式和退出码见 [CLI](cli.md)。只读命令以 SQLite 只读方式连接已初始化项目。未初始化目录返回 `not_initialized`，目录保持原样。
+用下面的读取命令，可以把任务和进展显示在自己的工具里。命令的完整写法是 `python3 worklog.py --project <项目根目录> <命令>`。这些命令只读取已有数据库。项目尚未初始化时会返回 `not_initialized`。
 
-| 命令 | `result` |
+| 命令 | 读到什么 |
 | --- | --- |
-| `identity` | `name` 和本实例的 `capabilities` |
-| `task-get <task_id 或 T001>` | 单一时点的任务及最新记录、交接引用和下一步 |
-| `snapshot` | `watermark`、`tasks`、`entry_refs` |
-| `changes --project-id ID --data-generation GEN --after SEQ [--limit N]` | `changes`、`next_after`、`has_more`、`watermark`。默认上限 100 批，可传 1 至 500 |
-| `entry-get <entry_id>` | 记录元数据和原始 `body_md` |
+| `identity` | 项目名称和支持的读取命令。 |
+| `task-get T001` | 一个任务的状态、最近记录和下一步。也可以传任务 ID。 |
+| `snapshot` | 项目的任务列表、工作记录的摘要和 ID，以及读取时已保存的最后一个变更序号。 |
+| `changes --project-id ID --data-generation GEN --after SEQ [--limit N]` | 从指定序号之后开始读变更。每次默认返回最多 100 条，可设为 1 到 500。 |
+| `entry-get <entry_id>` | 一条工作记录的摘要、时间和 Markdown 原文。 |
 
-## 身份
+每条成功结果都是一行 UTF-8 JSON。用 `ok` 判断是否成功。数据放在 `result`，同一行还有 `protocol_version`、`project_id` 和 `data_generation`。错误格式见 [CLI 说明](cli.md)。
 
-`project_id` 在初始化后持久化，目录整体移动后保持相同。任务以 `project_id` 与 `task_id` 识别，`number` 供本项目展示。对于当前数据流，游标按 `project_id` 与 `data_generation` 保存。两者都是不透明字符串。`changes` 校验调用方提供的登记项目和代次，其余只读响应由调用方校验返回的身份。发现身份不符应暂停应用。遇到新代次时，连接器需经重新核对后按新快照重建来源镜像。PoC 暂只生成和校验初始代次，受控恢复及变更代次属于后续验证。
+## 确认读的是同一个项目
 
-公开协议版本与 SQLite 内部结构版本分别管理。PoC 对不识别的 SQLite 结构拒绝读写。消费者应识别其支持的协议版本和能力后应用数据。
+- `project_id` 是 workLog 为项目分配的固定 ID。项目目录连同数据库一起移动后，ID 仍相同。
+- `data_generation` 是这份项目数据的标记。保存已读到的位置时，连同 `project_id` 和这个标记一起保存。如果标记不同，确认来源后重新读一次完整列表。v0.1.0 支持生成和校验这个标记。
+- `task_id` 是任务自己的 ID。界面可以显示 `number`，例如 T001。两个项目都可能有 T001，定位任务时应同时使用项目 ID 和任务 ID。
 
-## 任务和记录
+调用 `changes` 时要传项目 ID 和数据标记。其他读取命令也会返回这两个值，程序可用它们确认读到了正确的数据。先核对 `protocol_version` 是否是程序支持的版本。数据库内部格式另有自己的版本号。
 
-- 任务含 `task_id`、`number`、`title`、`status`、`revision`、`created_at`、`updated_at`、`active_run`、`latest_entry`、`latest_handoff`、`next_step`。状态支持 `TODO` 和 `IN_PROGRESS`。每次成功的业务变更推进任务版本。接手可能关闭而任务仍在进行中。
-- `active_run` 为 `null` 或含 `run_id`、`client`、`session_id`、`opened_at` 的对象。它表示登记的接手归属。界面据此显示接手人，运行在线状态需要额外来源。
-- `entry_refs` 或任务上的记录引用含 `entry_id`、`task_id`、`run_id`、`client`、`session_id`、`kind`、`summary`、`next_step` 和 `recorded_at`。`kind` 为 `PROGRESS` 或 `HANDOFF`。引用以 `entry_id` 去重，完整正文用 `entry-get` 取回。
-- `latest_handoff` 保留最近一次已保存的交接。产生后续进展时，`latest_entry` 和任务 `next_step` 指向新进展。时间字段为 UTC ISO 8601。增量的 `committed_at` 是变化批次在写事务中登记的时间，排序采用 `seq`。
+## 从上次读到的位置继续
 
-## 快照后接增量
+假设你第一次读取时，workLog 已经保存了编号 1 到 4 的变更。之后又有人接手任务、记了一条进展，这两次操作的序号是 5 和 6。按下面的步骤读取。
 
-1. 从一次 `snapshot` 保存项目身份、代次、任务、记录引用和 `watermark`。这些值来自同一个读事务，快照之后提交的变化可从水位后读取。空库的水位为 0。
-2. 以快照水位为排他游标调用 `changes`。同一响应里的批次按 `seq` 升序排列。每批包括唯一 `change_id`、写入类型、提交后的完整任务投影和本次新增的 `entry` 引用（没有记录时为 `null`）。分页序号可有间隔。
-3. 处理每页并以 `next_after` 请求下一页。它等于本页最后一批的序号，空页保留原游标。`watermark` 是本次分页读事务的最高已提交序号。`has_more` 是本次读事务观察到的剩余状态，之后有新写入时仍可继续拉取。游标超前返回 `cursor_ahead`。
-4. 以 `(project_id, data_generation, change_id)` 去重。按顺序将任务投影应用到 `task_id`，按 `entry_id` 合并引用。若另设补偿重放，应同时检查 `revision`，防止旧投影覆盖新投影。消费端的持久接收位置在页面可靠保存后推进，应用位置在本地投影成功后推进。
+1. **先拿当前列表。** 调用 `snapshot`，`result.tasks` 是任务列表，`result.entry_refs` 列出工作记录的摘要和 ID，`result.watermark` 是这份列表已包含的最后一个变更序号。在例子里是 4。三项来自同一次读取。在这之后保存的新变更，可用这个序号继续读。项目没有变更时，`watermark` 为 0。
+2. **只读后面的新变更。** 用刚拿到的两个项目标记调用 `changes --project-id ID --data-generation GEN --after 4`。它会返回序号大于 4 的变更，按 `seq` 从小到大排列。序号可能有间隔。
+3. **需要分批时，从结果给出的位置接着读。** 如果设置 `--limit 1`，本例第一次会读到 5。结果里的 `next_after` 是 5，下一次就传 `--after 5`。若返回空列表，`next_after` 仍等于原来的 `--after`。
 
-每个成功业务请求和其变化、操作指纹和回执由同一 SQLite 事务提交。重放成功的写请求返回同一批次。只读查询不增加变化。全量快照和历史引用在 v1.0 一次返回。随历史规模扩大，应新增并验收快照的分页或分段能力。
+`changes` 的 `result.changes` 是本次读到的变更。`result.watermark` 是**本次读取时，整个项目已经保存的最后一个变更序号**，所以可能比这一批的 `next_after` 大。`has_more` 表示在这次读取时后面还有数据。之后有新进展时，可以从上次的 `next_after` 继续读取。若 `--after` 大于项目当前的最后一个序号，会返回 `cursor_ahead`。
 
-## 用合成项目生成样本
+每次新保存的操作产生一条变更。任务更新与变更记录会一起保存。每条有 `seq`、`change_id`、操作名 `kind`、保存时间 `committed_at`、保存后的任务 `task`，以及新记录的摘要和 ID 等信息 `entry`。本次没有新增记录时，`entry` 为 `null`。重复提交同一次已保存的请求会返回原结果。读取命令不会产生新的变更。
 
-先按 [CLI 中的复跑步骤](cli.md#从不同目录复跑)运行 `start`，再执行 `snapshot`。记录返回的项目 ID、数据代次与水位。运行 `resume` 后，从该水位调用 `changes`，便可读到后续的接手和进展。对增量中带有记录引用的批次，使用同项目的 `entry-get` 查询原文。
+如果需要在自己的程序里保存一份任务列表，可以按 `(project_id, data_generation, change_id)` 识别已处理过的变更，再用 `task_id` 更新对应任务，用 `entry_id` 合并工作记录。重复读取时，结合 `revision` 避免旧状态覆盖新状态。把这一批保存成功之后，再记录下一次从哪儿开始读。如果先缓存、稍后再处理，可以分别记下已保存和已应用到的变更序号。
+
+## 任务和记录的主要字段
+
+- **任务**包含 `task_id`、显示编号 `number`、标题 `title`、状态 `status`、版本 `revision`、创建和更新时间 `created_at`、`updated_at`，以及 `active_run`、`latest_entry`、`latest_handoff` 和 `next_step`。任务状态有 `TODO` 和 `IN_PROGRESS`。任务每次有新的写入，版本号就会更新。
+- **当前接手**是 `active_run`。有接手时包含 `run_id`、`client`、`session_id` 和 `opened_at`，否则是 `null`。交接会结束接手，任务仍显示为进行中。
+- **工作记录的概览**包含 `entry_id`、`task_id`、`run_id`、`client`、`session_id`、`kind`、`summary`、`next_step` 和 `recorded_at`。类型 `PROGRESS` 表示进展，`HANDOFF` 表示交接。用 `entry-get` 取回 `body_md` 原文。最近一条记录在 `latest_entry`，最近一次交接在 `latest_handoff`。
+
+时间字段使用 UTC 的 ISO 8601 格式。排序时使用变更序号。
+
+## 自己生成上面的例子
+
+按 [CLI 的示例步骤](cli.md#在两个目录运行示例)执行 `start`，然后运行 `snapshot`。接着执行 `resume`，再用 `changes` 读快照序号之后的新变更。得到记录 ID 后，可用 `entry-get` 查看原文。

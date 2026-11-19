@@ -1,34 +1,27 @@
 # workLog
 
-workLog 是 Codex 和 OpenCode 共用的本机 Skill。它为项目记录任务、进展和交接，也提供可独立调用的 Python CLI。两个客户端可以从不同目录操作同一个项目，继续处理同一条任务。
+workLog 帮你在 Codex 和 OpenCode 之间接着做同一个项目。你可以在 Codex 记下做到哪里，之后到 OpenCode 读回进展和下一步，再接手同一条任务。
 
-- **查看**项目任务、最新进展和交接原文。
-- **接手、记录、交接**工作，保存 Markdown 正文和明确的下一步。
-- **读取结构化数据**，通过快照和增量构建只读视图。
+你可以新建任务、查看进展、接手、记录 Markdown 原文，也可以把任务交给下一个会话。每个项目各有一个数据库，放在自己的 `.worklog/` 目录里。
 
-每个项目的数据保存在各自的 `.worklog/` 目录中。同号任务按项目区分。查询使用只读连接，写入由工具校验任务版本并处理安全重试。
+## 第一次使用
 
-## 安装和使用
+1. 准备 Python 3.9 或以上。有安装 ZIP 就直接解压，也可以从 [v0.1.0 源码](https://github.com/LaudasMe/worklog/tree/v0.1.0) 运行 `python3 -B scripts/package_skill.py` 生成 ZIP。
+2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。
+3. 开一个新会话。Codex 用 `$worklog`，OpenCode 用 `@worklog`。告诉它项目路径和你要做的事。
 
-需要 Python 3.9 或以上。可从 [v0.1.0 预发布](https://github.com/LaudasMe/worklog/releases/tag/v0.1.0) 下载安装包并核对 SHA-256，也可从源码构建。
+[用户指南](docs/user-guide.md)有完整例子，从创建 T001 到换一个客户端继续处理。
 
-```sh
-python3 -B scripts/package_skill.py
-```
+## 从命令行使用
 
-按[安装说明](docs/skill.md)将 ZIP 解压到项目的 `.agents/skills/`。开启新会话后，在 Codex 使用 `$worklog`，在 OpenCode 使用 `@worklog`，再说明项目路径和任务编号。
+[CLI 说明](docs/cli.md)提供可运行的命令和常见错误的处理方法。[只读接口说明](docs/read-protocol.md)适合要在其他工具里显示任务和进展的人。
 
-- [用户指南](docs/user-guide.md)
-- [安装与复跑说明](docs/skill.md)
-- [CLI 调用与输入输出](docs/cli.md)
-- [公开只读协议 1.0](docs/read-protocol.md)
-
-## 验证
+## 运行测试
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-测试在临时目录生成合成项目，覆盖安装包重建、任务隔离、事务回滚、只读协议和跨目录接力。
+测试用临时项目检查安装包、跨目录接力、项目之间的数据隔离和只读查询。
 
 许可证见 [LICENSE](LICENSE)。

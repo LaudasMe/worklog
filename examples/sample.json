@@ -1,9 +1,9 @@
 {
-  "project_name": "北辰合成项目",
+  "project_name": "示例项目",
   "task_title": "核对样例订单的金额",
   "progress": {
-    "summary": "已核对合成订单金额",
-    "body_md": "# 阶段进展\n\n已核对两笔合成订单，金额分别为 2 和 3。\n\n```python\namounts = [2, 3]\nassert sum(amounts) == 5\n```\n\n保留这段正文和末尾换行。\n",
+    "summary": "已核对示例订单金额",
+    "body_md": "# 阶段进展\n\n已核对两笔示例订单，金额分别为 2 和 3。\n\n```python\namounts = [2, 3]\nassert sum(amounts) == 5\n```\n\n保留这段正文和末尾换行。\n",
     "next_step": "添加一笔金额为 0 的订单，并核对合计仍为 5。"
   },
   "handoff": {
@@ -14,6 +14,6 @@
   "continued": {
     "summary": "零金额边界验证通过",
     "body_md": "# 接续进展\n\n读取上一段 Markdown 和交接后，验证了零金额边界。\n\n```python\nassert sum([2, 3, 0]) == 5\n```\n",
-    "next_step": "整理三笔合成订单的验证结果。"
+    "next_step": "整理三笔示例订单的验证结果。"
   }
 }
