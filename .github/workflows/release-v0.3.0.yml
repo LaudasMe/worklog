@@ -2,11 +2,17 @@ name: Publish workLog v0.3.0
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-v0.3.0.yml
     tags:
       - v0.3.0
 
 permissions:
   contents: write
+
+concurrency: worklog-release-v0.3.0
 
 jobs:
   publish:
@@ -16,6 +22,7 @@ jobs:
       - name: Check out tagged source and migration fixtures
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/tags/v0.3.0
           fetch-depth: 0
           persist-credentials: false
       - name: Test the release
@@ -35,7 +42,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           output="${RUNNER_TEMP}/worklog-release"
-          gh release create "$GITHUB_REF_NAME" \
+          if gh release view v0.3.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            exit 0
+          fi
+          gh release create v0.3.0 \
             "$output/worklog-skill-v0.3.0.zip" "$output/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title 'workLog v0.3.0' \
             --latest --notes-file - <<'NOTES'
