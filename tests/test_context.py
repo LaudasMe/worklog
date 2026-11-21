@@ -1,6 +1,7 @@
 import argparse
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -14,23 +15,28 @@ from worklog_upgrade import install_context_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "worklog.py"
-LEGACY = "refs/tags/v0.1.0"
+LEGACY = "v0.1.0"
 MARKDOWN = "# 验证\n\n```python\nassert sum([2, 3]) == 5\n```\n"
 
 
-def invoke(cli, directory, *args, data=None):
+def isolated_home(path):
+    return {**os.environ, "HOME": str(path), "USERPROFILE": str(path)}
+
+
+def invoke(cli, directory, *args, data=None, home=None):
     result = subprocess.run(
         [sys.executable, "-B", str(cli), *args], cwd=directory,
         input=json.dumps(data, ensure_ascii=False).encode(), capture_output=True, timeout=15,
+        env=isolated_home(home or Path(directory) / ".test-home"),
     )
     if result.stderr:
         raise AssertionError(result.stderr.decode())
     return result.returncode, json.loads(result.stdout)
 
 
-def source_at(revision, destination):
+def source_at(revision, destination, extra_files=()):
     destination.mkdir()
-    for name in ("worklog.py", "worklog_store.py", "schema.sql"):
+    for name in ("worklog.py", "worklog_store.py", "schema.sql", *extra_files):
         path = ROOT / name
         (destination / name).write_bytes(subprocess.check_output(
             ["git", "show", f"{revision}:{path.name}"], cwd=ROOT,
@@ -43,12 +49,13 @@ class ContextCase(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="worklog-context-")
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
+        self.home = self.root / "home"
         self.project = self.root / "合成项目 #1"
         self.project.mkdir()
         self.db = project_db(self.project)
 
     def call(self, *args, data=None, project=None, cli=CLI, error=None):
-        code, reply = invoke(cli, project or self.project, *args, data=data)
+        code, reply = invoke(cli, project or self.project, *args, data=data, home=self.home)
         if error is None:
             self.assertEqual(code, 0, reply)
         else:
@@ -91,7 +98,8 @@ class UpgradeTest(ContextCase):
              identity["data_generation"], "--after", "0"),
         ]
         before = [self.call(*at, *query, cli=old) for query in old_queries]
-        self.assertEqual([self.call(*query) for query in old_queries], before)
+        for query in old_queries:
+            self.call(*query, error="upgrade_required")
         self.assertEqual(self.db.read_bytes(), original_db)
 
         backup = self.root / "backup.sqlite3"
@@ -114,11 +122,24 @@ class UpgradeTest(ContextCase):
             self.assertIsNone(db.execute(
                 "SELECT 1 FROM sqlite_master WHERE name = 'context_records'"
             ).fetchone())
-        self.assertEqual([self.call(*query) for query in old_queries], before)
+        self.assertEqual([self.call(*at, *query, cli=old) for query in old_queries], before)
+        for query in old_queries:
+            self.call(*query, error="upgrade_required")
         self.assertEqual(self.call("upgrade", "--backup", str(backup))["result"],
-                         {"previous_schema_version": 1, "schema_version": 2})
+                         {"previous_schema_version": 1, "schema_version": 4})
         self.assertEqual(backup.read_bytes(), original_backup)
-        self.assertEqual([self.call(*query) for query in old_queries], before)
+        identity_reply, task_reply, snapshot_reply, *entry_replies = before[:-1]
+        self.assertEqual(self.call("identity"), {**identity_reply, "protocol_version": "2.0"})
+        projected = {**task_reply["result"], "display_status": "IN_PROGRESS", "archived": False,
+                     "priority": None, "blocker_refs": []}
+        self.assertEqual(self.call("task-get", "T001")["result"], projected)
+        baseline = snapshot_reply["result"]
+        self.assertEqual(self.call("snapshot")["result"], {**baseline, "tasks": [projected]})
+        for query, original in zip(old_queries[3:5], entry_replies):
+            self.assertEqual(self.call(*query), {**original, "protocol_version": "2.0"})
+        page = old_queries[-1]
+        self.call(*page, error="cursor_stale")
+        self.assertEqual(self.call(*page[:-1], str(baseline["watermark"]))["result"]["changes"], [])
         self.assertEqual(self.call("entry-get", handoff["entry"]["entry_id"])["result"]["body_md"],
                          MARKDOWN)
         self.assertEqual(self.write("handoff", "legacy-handoff", identity,
@@ -134,7 +155,8 @@ class UpgradeTest(ContextCase):
         self.call("backup", "--output", str(backup))
         self.write("task-create", "next", identity, args=at, cli=old, title="备份后写入")
         self.call("upgrade", "--backup", str(backup), error="invalid_backup")
-        self.assertEqual(self.call("task-get", "T001", cli=CLI)["result"]["title"], "备份后写入")
+        self.call("task-get", "T001", error="upgrade_required")
+        self.assertEqual(self.call(*at, "task-get", "T001", cli=old)["result"]["title"], "备份后写入")
 
     def test_read_uninitialized_directory_leaves_no_files(self):
         self.call("identity", error="not_initialized")
@@ -311,7 +333,7 @@ class SummariesTest(SeededContextCase):
                             body_md=MARKDOWN, next_step="等待验证")["result"]
         self.write("task-create", "empty", self.identity, title="没有摘要")
         tasks = self.call("summaries", "--type", "task")["result"]["items"]
-        legacy_snapshot = self.call("snapshot")
+        baseline = self.call("snapshot")["result"]
         self.assertEqual([row["number"] for row in tasks], ["T002", "T001"])
         self.assertIsNone(tasks[0]["summary"])
         self.assertIsNone(tasks[0]["source"])
@@ -370,7 +392,7 @@ class SummariesTest(SeededContextCase):
                          [first[1]["record_id"]])
         self.assertNotIn("样本缺失", [row["summary"] for row in self.call(*opts)["result"]["items"]])
         self.assertEqual(self.call(*opts, "--status", "CANCELLED")["result"]["items"], [])
-        self.assertEqual(self.call("snapshot"), legacy_snapshot)
+        self.assertEqual(self.call("snapshot")["result"], {**baseline, "watermark": baseline["watermark"] + 2})
 
     def test_summaries_before_upgrade_and_uninitialized(self):
         outside = self.root / "outside"

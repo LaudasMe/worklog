@@ -1,54 +1,56 @@
-# 安装 workLog Skill
+# 安装和使用 workLog Skill
 
-安装包内含 Codex 和 OpenCode 共用的 Skill、Python 命令行工具和命令参考。需要 Python 3.9 或以上，以及 `unzip`。
+这个本机候选包包含 Codex 与 OpenCode 共用的 `SKILL.md`、Python CLI 和命令参考。使用 Python 3.9 或以上和 `unzip`。从当前源码构建的 CLI 支持任务状态、优先级、项目登记及公开只读协议 2.0。公开读取要求 schema 4。用 `context` 和 `summaries` 可以先核对旧库，再按需要备份和升级。命令见包内 `references/commands.md`。
 
-## 准备 ZIP
+## 取得安装包
 
-从 [v0.2.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.2.0) 下载 `worklog-skill-v0.2.0.zip` 和 `SHA256SUMS`。两个文件放在同一目录后，可运行 `shasum -a 256 -c SHA256SUMS` 校验。也可以从 v0.2.0 源码目录运行下面的命令构建安装包。
+从 workLog 仓库根目录构建到单独的目录。脚本输出安装包的绝对路径。已有基于当前源码构建的安装包时可以直接解压。
 
 ```sh
-python3 -B scripts/package_skill.py
+PACKAGE_DIR="$(mktemp -d)"
+python3 -B scripts/package_skill.py --output-dir "$PACKAGE_DIR"
 ```
 
-构建产生 `dist/worklog-skill-v0.2.0.zip`。
+## 项目级安装
 
-## 选择安装位置
-
-| 你想在哪儿使用 | 安装位置 |
-| --- | --- |
-| 只在一个 Git 仓库使用，Codex 和 OpenCode 共用 | 该 Git 仓库根目录的 `.agents/skills/` |
-| 在本机 Codex 的多个项目里使用 | `~/.agents/skills/` |
-| 在本机 OpenCode 的多个项目里使用 | `~/.config/opencode/skills/` |
-
-下方用 Codex 的本机目录举例。把 `SKILL_ZIP` 换成 ZIP 的实际路径。给 OpenCode 安装时，把 `SKILLS_DIR` 换成 `"$HOME/.config/opencode/skills"`。
+首次安装请选一个独立的 Git 项目根。把以下路径替换为实际绝对路径。两端从这个根目录或子目录启动新会话。ZIP 自带 `worklog/` 目录。
 
 ```sh
-SKILL_ZIP="/path/to/worklog-skill-v0.2.0.zip"
-SKILLS_DIR="$HOME/.agents/skills"
+SKILL_ZIP="/absolute/path/to/worklog-skill-v0.3.0.zip"
+PROJECT_ROOT="/absolute/path/to/project-root"
+SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 mkdir -p "$SKILLS_DIR"
 test ! -e "$SKILLS_DIR/worklog" &&
   unzip -n "$SKILL_ZIP" -d "$SKILLS_DIR" &&
   python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" --version
 ```
 
-解压后，`worklog/` 目录里应能看到 `SKILL.md`。最后一条命令会显示 CLI 的协议版本。项目里已有 workLog 时，可以直接查询。新项目要明确要求初始化，数据库会建在那个项目的 `.worklog/` 下。
+命令会先检查是否已有 worklog 安装。当前 CLI 的版本输出为 `workLog CLI protocol 2.0`。升级时把新版本先解压到临时目录，用解压后的 CLI 执行 `--version` 核对协议，再整体替换 `.agents/skills/worklog/` 并开启新会话。每个工作项目的 SQLite 数据位于自己的 `.worklog/`。两端的登记共用 `~/.local/share/worklog/projects.json`，两者均独立于 Skill 安装目录。移除 Skill 时只移除安装的 `.agents/skills/worklog/` 目录。
 
-## 试一下
+如要多项目共用，可用相同方法解压到 `~/.agents/skills/` 并开启新会话。项目和用户级目录只保留一个用于当前验收的 `worklog` 定义，便于核对实际加载版本。两个客户端仍通过你确认的项目路径定位数据。
 
-开一个客户端新会话。Codex 用 Skill 选择器选择 `worklog`，OpenCode 可直接请它用原生 `skill` 工具加载 `worklog`。如果同一台机器有多个安装位置，先核对客户端实际加载的 Skill 路径。
+## 使用
 
-> `$worklog` 初始化 `<项目根目录>` 的 workLog，项目名称为「示例项目」。建一个任务「核对订单合计」。
+在 Codex 中通过 Skill 选择器选择 `worklog`。在 OpenCode 中请 Agent 通过内置 `skill` 工具加载 `worklog`。从项目根发起请求时可直接说「当前项目」。跨目录或有多个可能项目时给出项目绝对路径。
 
-> `@worklog` 查看 `<项目根目录>` 的 T001。告诉我当前阶段和下一步。
+- 「查看这个项目的 T001 进展和最近交接。」
+- 「用 workLog 摘要发现当前项目中的任务，读取项目和任务上下文。继续其中待做的验证，并把确认的结果写回。」
+- 「开始 T001。」
+- 「把 T001 的优先级设为 p1，再看看当前待推进的任务。」
+- 「暂停 T001，保留接手；把进展交给另一个会话。」
+- 「接手 T001，先告诉我上次交接的下一步。」
+- 「将这些检查结果记到 T001，下一步是核对零金额。」
+- 「引用刚才保存的验证记录，把 T001 标记为完成。」
+- 「把 T001 交接出去，说明下一位应该核对什么。」
 
-从项目根目录开的新会话可以直接说「用 workLog 列出当前项目的任务，读取项目和任务上下文」。从其他目录启动时，补充项目绝对路径。
+空项目可明确请 Skill 「初始化 workLog，项目名称为北辰样例」并「新建一个任务，标题为核对金额」。数据已经初始化时，查看请求可直接执行。开始任务无需接手。标记完成时引用已有日志。需要交接时，当前会话须持有对应任务的接手。查询已完成任务使用 `context --task T001`。
 
-把 `<项目根目录>` 换成已有项目文件夹的完整路径，把「示例项目」改成你的项目名。想验证交接，可以在 Codex 接手、记一条进展并交接，然后在 OpenCode 新会话查看原文并接手。要验证项目之间的数据隔离，可以用两个有不同标题的 T001，按路径分别查询。
+## 从新会话复跑验收
 
-## 更新或移除
+1. 创建两个合成 Git 项目并安装同一个 ZIP。用仓库的 `examples/context_seed.py` 准备第一个项目，传入 `--alternate` 准备第二个。记录各自的项目 ID、任务 ID、数据库 SHA-256 和 2.0 快照。
+2. 在 Codex 和 OpenCode 分别开启新会话，通过各自原生的 Skill 入口加载候选包并请求只读查询。核对安装位置、任务 ID、状态和摘要，比较数据库 SHA-256 与快照。
+3. 在北辰项目根开启一个新会话。只告诉它使用 Skill，先通过摘要找到当前任务，再读项目和任务上下文，根据待办执行实际工作并写回。另开新会话，只读复查摘要、当前上下文、已关闭事项、尚未关闭的问题和被替换决定的原文。
+4. 检查北辰的新进展与实际文件，比较南星数据库的前后哈希和项目数据。跨客户端接棒可单独用 `claim`、`checkpoint`、`handoff` 复跑。
+5. 在单独的合成项目里新建任务，请 Skill 显式开始、保存一条带任务关联的验证日志，再引用该日志标记完成。另开只读会话，通过原生入口加载同一份 Skill，筛选 `DONE` 后用 `context --task T001` 获取完成依据，按其命令和 ID 读回原文。核对新会话读取前后的数据库哈希。
 
-更新时可以先把新版本解压到临时目录，再用其中的 `worklog/` 替换已有安装目录，随后开一个新会话。移除时删除安装的 `worklog/` 目录即可。任务和进展保存在各项目的 `.worklog/` 里。
-
-如果项目库来自 v0.1.0，可以先用 v0.2.0 查询。首次写入上下文前，用 v0.2.0 CLI 运行 `backup --output <备份文件>`，再运行 `upgrade --backup <备份文件>`。数据库备份和升级按项目执行。
-
-安装目录中的 `references/commands.md` 有命令参数和 JSON 示例。
+替换一端安装包后，从两端用 `projects list` 核对原登记和数据库身份，再替换另一端并重复。合成测试保留客户端的 Skill 加载和调用回执。只读查询与显式写入分别验收。客户端步骤可使用上述自然语言，命令字段见安装目录下的 `references/commands.md`。

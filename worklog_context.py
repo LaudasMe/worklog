@@ -6,9 +6,11 @@ from pathlib import PurePosixPath
 import re
 
 from worklog_store import (
-    CONTEXT_VERSION, KINDS, WorklogError, context_supported, integer, json_text, latest_entry, open_run, origin,
-    require_fields, require_project, schema_version, string_field, task_row, task_view,
-    timestamp, uid,
+    CONTEXT_VERSION, CURRENT_TASK_ACTIONS_SQL, KINDS, OPEN_TASK_STATES, SCHEMA_VERSION, TASK_ACTIONS,
+    WorklogError, append_change, available_reopen_candidates, context_supported, effective_blockers,
+    effective_todos, entry_refs, integer, json_text, latest_entry, open_run, origin, require_fields, require_project,
+    require_task_state, run_history, schema_version, string_field, task_display_status,
+    task_lifecycle_history, task_position, task_row, task_view, timestamp, uid,
 )
 from worklog_summaries import project_tasks
 
@@ -141,6 +143,11 @@ def check_replacement(db, scope, task_id, kind, details, replaces):
                                superseded_by=older["superseded_by"])
         if kind in ACTIONS and older["status"] != "OPEN" and details["status"] != older["status"]:
             raise WorklogError("record_conflict", "A closed item can only be corrected in its current state.")
+        if task_id and kind in TASK_ACTIONS and older["status"] == "OPEN" and db.execute(
+            f"SELECT 1 FROM ({CURRENT_TASK_ACTIONS_SQL}) WHERE record_id = ?", (replaces,),
+        ).fetchone() is None:
+            raise WorklogError("record_conflict", "Carry forward a historical item before changing it.",
+                               record_id=replaces)
     elif kind in ACTIONS and details["status"] != "OPEN":
         invalid("New items start OPEN. Close an existing item by replacing it.")
     elif kind == "GOAL" and db.execute(
@@ -148,13 +155,6 @@ def check_replacement(db, scope, task_id, kind, details, replaces):
         " AND kind = 'GOAL' AND superseded_by IS NULL", (scope, task_id)
     ).fetchone():
         raise WorklogError("record_conflict", "Replace the current goal explicitly.")
-
-
-def task_position(db, task_id):
-    if not context_supported(db):
-        return 0
-    return db.execute("SELECT COALESCE(MAX(position), 0) FROM context_records WHERE task_id = ?",
-                      (task_id,)).fetchone()[0]
 
 
 def source_for(db, scope, request):
@@ -180,17 +180,39 @@ def source_for(db, scope, request):
                            current_revision=task["revision"], current_context_position=position)
     if active:
         client, session = active["client"], active["session_id"]
-    return task_id, (client, session, run_id)
+    return task, (client, session, run_id)
 
 
-def add_record(db, scope, task_id, source, raw, saved, at):
+def carry_forward_ref(db, task, kind, details, item):
+    require_task_state(task, OPEN_TASK_STATES)
+    original_id = string_field(item, "carry_forward_id")
+    if kind not in TASK_ACTIONS or details["status"] != "OPEN" or "replaces_id" in item:
+        invalid("Carry forward a task TODO or BLOCKER as a new open item.")
+    original = find_record(db, original_id)
+    if (original["task_id"], original["kind"], original["status"]) != (task["task_id"], kind, "OPEN"):
+        invalid("Carry forward an open historical item of the same task and kind.")
+    if not any(candidate["record_id"] == original_id for candidate in
+               available_reopen_candidates(db, task["task_id"])):
+        raise WorklogError("record_conflict", "Item is unavailable for carry-forward after this reopen.",
+                           record_id=original_id)
+    return {"type": "RECORD", "target_record_id": original_id, "relation": "CARRY_FORWARD"}
+
+
+def add_record(db, scope, task, source, raw, saved, at):
+    task_id = task["task_id"] if task is not None else None
     item = object_value(raw, "record")
-    optional = ("refs", "replaces_id", "related_task_id") if scope == "PROJECT" else ("refs", "replaces_id")
+    optional = ("refs", "replaces_id", "related_task_id") if scope == "PROJECT" else (
+        "refs", "replaces_id", "carry_forward_id",
+    )
     require_fields(item, ("kind", "summary", "body_md", "details"), optional)
     kind = choice(item, "kind", KINDS)
     summary, body = (string_field(item, key) for key in ("summary", "body_md"))
     details = details_for(item, kind)
     refs = references_for(db, item.get("refs", []), saved)
+    if task is not None and kind in TASK_ACTIONS:
+        require_task_state(task, (*OPEN_TASK_STATES, "DONE"))
+    if "carry_forward_id" in item:
+        refs.append(carry_forward_ref(db, task, kind, details, item))
     if (kind in ("DECISION", "CONSTRAINT") or details.get("outcome_md")) and not refs:
         invalid("Decisions, constraints and closed items require evidence in refs.")
     related = None
@@ -232,17 +254,23 @@ def record(db, project, request):
     raw_records = array_value(request["records"], "records")
     if not raw_records:
         invalid("records must contain at least one item.")
-    task_id, source = source_for(db, scope, request)
+    task, source = source_for(db, scope, request)
+    task_id = task["task_id"] if task is not None else None
+    before = None
+    if task_id is not None and schema_version(db) >= SCHEMA_VERSION:
+        before = {row["record_id"] for row in effective_blockers(db, task_id)}
     at = timestamp()
     saved = []
     for raw in raw_records:
-        saved.append(add_record(db, scope, task_id, source, raw, saved, at))
+        saved.append(add_record(db, scope, task, source, raw, saved, at))
     result = {
         "context_version": CONTEXT_VERSION, "operation_id": operation_id, "committed_at": at,
         "scope": scope, "task_id": task_id, "records": saved,
         "context_position": saved[-1]["position"] if task_id else None,
     }
     db.execute("INSERT INTO context_operations VALUES (?, ?, ?)", (operation_id, digest, json_text(result)))
+    if before is not None and before != {row["record_id"] for row in effective_blockers(db, task_id)}:
+        append_change(db, "task-blockers", operation_id, digest, at, task_id)
     return result
 
 
@@ -321,6 +349,8 @@ def context(db, project, task_key, root):
     own = newest_first(db, root, "scope = 'PROJECT'" if task_id is None else "task_id = ?",
                        () if task_id is None else (task_id,))
     buckets = {kind: [row for row in own if row["kind"] == kind] for kind in KINDS}
+    blockers = [record_view(db, row, root, include_body=task_id is not None)
+                for row in reversed(effective_blockers(db, task_id))]
     progress = buckets["PROGRESS"]
     goals = buckets["GOAL"]
     legacy = []
@@ -340,7 +370,7 @@ def context(db, project, task_key, root):
         "decisions": buckets["DECISION"], "impacts": impact_view(progress, legacy),
         "open_questions": [row for row in buckets["QUESTION"] if row["status"] == "OPEN"],
         "todos": [row for row in buckets["TODO"] if row["status"] == "OPEN"],
-        "blockers": [row for row in buckets["BLOCKER"] if row["status"] == "OPEN"],
+        "blockers": blockers if task_id else [row for row in buckets["BLOCKER"] if row["status"] == "OPEN"],
         "constraints": buckets["CONSTRAINT"], "documents": buckets["DOCUMENT"],
         "progress": progress, "legacy_latest": legacy,
     }
@@ -353,14 +383,27 @@ def context(db, project, task_key, root):
     ]
     if task_id:
         result["task"] = task_view(db, task)
+        result["task"]["display_status"] = task_display_status(task["status"], blockers)
         result["task"]["context_position"] = task_position(db, task_id)
+        result["task"]["priority"] = task["priority"] if "priority" in task.keys() else None
         result["project_context"] = newest_first(
             db, root, "scope = 'PROJECT' AND (kind IN ('CONSTRAINT', 'DECISION', 'DOCUMENT')"
             " OR (kind = 'PROGRESS' AND related_task_id = ?))", (task_id,)
         )
+        if "archived" in task.keys():
+            result["task"]["archived"] = bool(task["archived"])
+            result["todos"] = [record_view(db, row, root) for row in reversed(effective_todos(db, task_id))]
+            effective_ids = {row["record_id"] for row in (*result["todos"], *blockers)}
+            result["action_history"] = [record_view(db, row, root) for row in db.execute(
+                f"SELECT * FROM context_index WHERE task_id = ? AND kind IN {TASK_ACTIONS}"
+                " ORDER BY position DESC", (task_id,),
+            ) if row["record_id"] not in effective_ids]
+            result["lifecycle_history"] = task_lifecycle_history(db, task_id)
+            result["run_history"] = run_history(db, task_id)
+            result["entry_refs"] = entry_refs(db, task_id)
+            result["reopen_candidates"] = available_reopen_candidates(db, task_id) \
+                if task["status"] in OPEN_TASK_STATES else []
     else:
         result["related_tasks"] = project_tasks(db)
-        result["task_blockers"] = newest_first(
-            db, root, "scope = 'TASK' AND kind = 'BLOCKER' AND status = 'OPEN'"
-        )
+        result["task_blockers"] = blockers
     return result

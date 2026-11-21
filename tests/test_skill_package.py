@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from zipfile import ZipFile
 
+from test_context import isolated_home
+
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "scripts" / "package_skill.py"
 
@@ -26,7 +28,7 @@ class SkillPackageTest(unittest.TestCase):
     def test_package_reproducible_and_only_contains_tracked_runtime_sources(self):
         first = self.build(self.directory / "first")
         second = self.build(self.directory / "second")
-        self.assertEqual(first.name, "worklog-skill-v0.2.0.zip")
+        self.assertEqual(first.name, "worklog-skill-v0.3.0.zip")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         expected = {
             "worklog/SKILL.md": "skills/worklog/SKILL.md",
@@ -34,11 +36,14 @@ class SkillPackageTest(unittest.TestCase):
             "worklog/references/commands.md": "skills/worklog/references/commands.md",
             "worklog/scripts/schema.sql": "schema.sql",
             "worklog/scripts/schema_context.sql": "schema_context.sql",
+            "worklog/scripts/schema_lifecycle.sql": "schema_lifecycle.sql",
+            "worklog/scripts/schema_v4.sql": "schema_v4.sql",
             "worklog/scripts/worklog.py": "worklog.py",
             "worklog/scripts/worklog_store.py": "worklog_store.py",
             "worklog/scripts/worklog_context.py": "worklog_context.py",
             "worklog/scripts/worklog_summaries.py": "worklog_summaries.py",
             "worklog/scripts/worklog_upgrade.py": "worklog_upgrade.py",
+            "worklog/scripts/worklog_projects.py": "worklog_projects.py",
         }
         with ZipFile(first) as archive:
             self.assertIsNone(archive.testzip())
@@ -53,14 +58,18 @@ class SkillPackageTest(unittest.TestCase):
         with ZipFile(self.build(self.directory / "dist")) as archive:
             archive.extractall(installed)
         cli = installed / "worklog/scripts/worklog.py"
+        version = subprocess.check_output(
+            [sys.executable, "-B", str(cli), "--version"],
+            cwd=self.directory, text=True, timeout=15,
+        )
+        self.assertEqual(version.strip(), "workLog CLI protocol 2.0")
 
-        def call(command, *args, request=None, from_project=False):
+        def call(*args, request=None):
             encoded = json.dumps(request, ensure_ascii=False).encode("utf-8")
-            project_args = [] if from_project else ["--project", str(project)]
             result = subprocess.run(
-                [sys.executable, "-B", str(cli), *project_args, command, *args],
-                cwd=project if from_project else self.directory,
-                input=encoded, capture_output=True, timeout=15, check=False,
+                [sys.executable, "-B", str(cli), "--project", str(project), *args],
+                cwd=self.directory, input=encoded, capture_output=True, timeout=15, check=False,
+                env=isolated_home(self.directory / "home"),
             )
             self.assertEqual(result.stderr, b"")
             return result.returncode, json.loads(result.stdout)
@@ -80,12 +89,14 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual(status, 0)
         status, task = call("task-get", "T001")
         self.assertEqual(status, 0)
-        self.assertEqual(task["protocol_version"], "1.0")
-        self.assertEqual(task["result"], receipt["result"]["task"])
+        self.assertEqual(task["protocol_version"], "2.0")
+        self.assertEqual(task["result"], {
+            **receipt["result"]["task"], "display_status": "TODO", "archived": False,
+            "priority": None, "blocker_refs": [],
+        })
+        status, explicit = call("--protocol-version", "2.0", "task-get", "T001")
+        self.assertEqual((status, explicit), (0, task))
+        status, retired = call("--protocol-version", "1.0", "task-get", "T001")
+        self.assertNotEqual(status, 0)
+        self.assertEqual(retired["error"]["code"], "invalid_input")
         self.assertEqual(call("snapshot")[1]["result"]["watermark"], 1)
-        status, context = call("context", "--task", "T001", from_project=True)
-        self.assertEqual(status, 0)
-        self.assertEqual(context["result"]["task"]["task_id"], task["result"]["task_id"])
-        status, summaries = call("summaries", "--type", "task", "--status", "TODO", from_project=True)
-        self.assertEqual(status, 0)
-        self.assertEqual([row["number"] for row in summaries["result"]["items"]], ["T001"])

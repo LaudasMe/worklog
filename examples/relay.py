@@ -21,7 +21,7 @@ class Relay:
         self.project = str(Path(project).resolve())
 
     def call(self, command, *options, data=None, error=None):
-        argv = [sys.executable, str(CLI), "--project", self.project, command, *options]
+        argv = [sys.executable, "-B", str(CLI), "--project", self.project, command, *options]
         raw = None if data is None else json.dumps(data, ensure_ascii=False).encode("utf-8")
         process = subprocess.run(argv, input=raw, capture_output=True, check=False)
         reply = json.loads(process.stdout)
@@ -29,6 +29,8 @@ class Relay:
         require(reply["ok"] == (error is None), repr(reply))
         if error:
             require(reply["error"]["code"] == error, repr(reply))
+        else:
+            require(reply["protocol_version"] == "2.0", "Expected protocol 2.0.")
         print(json.dumps({"argv": [command, *options], "request": data,
                           "exit": process.returncode, "reply": reply}, ensure_ascii=False), flush=True)
         return reply
@@ -91,7 +93,12 @@ class Relay:
             "run_id": first_claim["active_run"]["run_id"], **SAMPLE["progress"],
         }
         replay = self.call("checkpoint", data=request)
-        require(replay["result"] == events[2], "Successful retry did not reproduce its receipt.")
+        recorded = events[2]
+        # Public reads enrich the task projection while writes replay the stored receipt.
+        public_task_fields = {"display_status", "archived", "priority", "blocker_refs"}
+        recorded_task = {key: value for key, value in recorded["task"].items() if key not in public_task_fields}
+        require(replay["result"] == {**recorded, "task": recorded_task},
+                "Successful retry did not match the stored change.")
         self.call("checkpoint", data={**request, "operation_id": "relay-stale-rejected"},
                   error="stale_run")
         snapshot = self.call("snapshot")["result"]

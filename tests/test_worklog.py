@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import worklog
 import worklog_store as store
-from test_context import LEGACY, invoke, source_at
+from test_context import LEGACY, invoke, isolated_home, source_at
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "worklog.py"
@@ -24,6 +24,7 @@ class ProjectCase(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="worklog-test-")
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
+        self.env = isolated_home(self.root / "home")
         self.project = self.root / "合成项目 #1"
         self.caller = self.root / "another caller"
         self.project.mkdir()
@@ -34,7 +35,7 @@ class ProjectCase(unittest.TestCase):
             raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
         process = subprocess.run(
             [sys.executable, str(CLI), "--project", str(project or self.project), command, *args],
-            input=raw, capture_output=True, cwd=cwd or self.caller, timeout=15,
+            input=raw, capture_output=True, cwd=cwd or self.caller, timeout=15, env=self.env,
         )
         self.assertEqual(process.returncode, code, (process.stdout, process.stderr))
         self.assertEqual(process.stderr, b"")
@@ -55,7 +56,7 @@ class ProjectCase(unittest.TestCase):
         backup = self.root / "legacy.sqlite3"
         self.call("backup", "--output", str(backup))
         self.call("upgrade", "--backup", str(backup))
-        self.assertEqual(self.call("identity"), legacy)
+        self.assertEqual(self.call("identity"), {**legacy, "protocol_version": "2.0"})
         return legacy
 
     def request(self, identity, operation, task=None, **fields):
@@ -115,7 +116,9 @@ class ProjectCase(unittest.TestCase):
         moved = self.root / "移动后的目录"
         self.project.rename(moved)
         reply = self.call("task-get", "T001", project=moved, cwd=self.root)
-        self.assertEqual(reply["result"], original)
+        self.assertEqual(reply["result"], {
+            **original, "display_status": "TODO", "archived": False, "priority": None, "blocker_refs": [],
+        })
         self.assertEqual(reply["project_id"], first["project_id"])
         self.assertEqual(reply["data_generation"], first["data_generation"])
         self.page(first, 0, project=other, code=4, error="project_mismatch")
@@ -254,7 +257,7 @@ sys.exit(worklog.main())
                     transactions.append(db.in_transaction)
                     writer = subprocess.Popen(
                         [sys.executable, "-c", writer_code, "--project", str(self.project), "task-create"],
-                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT,
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT, env=self.env,
                     )
                     writers.append(writer)
                     writer.stdin.write(json.dumps(request).encode("utf-8"))
@@ -281,9 +284,10 @@ sys.exit(worklog.main())
                     writer.communicate()
         self.assertEqual(transactions, [True, True], "Snapshot did not overlap the writer's commit attempt.")
         self.assertEqual(baseline["watermark"], 1)
-        self.assertEqual(baseline["tasks"], [task])
+        fields = {"display_status": "TODO", "archived": False, "priority": None, "blocker_refs": []}
+        self.assertEqual(baseline["tasks"], [{**task, **fields}])
         after = self.page(identity, baseline["watermark"])["result"]
-        self.assertEqual(after["changes"], [change])
+        self.assertEqual(after["changes"], [{**change, "task": {**change["task"], **fields}}])
         self.assertEqual(self.call("snapshot")["result"]["watermark"], 2)
 
     def test_cli_only_reader_reconstructs_state_and_replays_duplicate_pages(self):
@@ -305,7 +309,7 @@ sys.exit(worklog.main())
         cursor = baseline["watermark"]
 
         def apply(envelope):
-            self.assertEqual(envelope["protocol_version"], "1.0")
+            self.assertEqual(envelope["protocol_version"], "2.0")
             self.assertEqual(envelope["project_id"], identity["project_id"])
             self.assertEqual(envelope["data_generation"], identity["data_generation"])
             for change in envelope["result"]["changes"]:
@@ -338,36 +342,44 @@ sys.exit(worklog.main())
         end = self.page(identity, cursor)["result"]
         self.assertEqual(end, {"changes": [], "has_more": False, "next_after": cursor, "watermark": cursor})
 
-    def test_public_handoff_receipts_match_the_snapshots_and_change_feed(self):
-        identity = self.initialize()
-        task = self.claim(identity, self.create(identity))
-        request = self.record(identity, task, "progress", "progress")
-        progress = self.call("checkpoint", data=request)
-        task = progress["result"]["task"]
-        handoff = self.call("handoff", data=self.record(identity, task, "handoff", "handoff"))
-        handed_off = handoff["result"]["task"]
-        snapshot = self.call("snapshot")
-        self.assertEqual(snapshot["result"]["tasks"], [handed_off])
-        self.assertEqual(snapshot["result"]["watermark"], handoff["result"]["seq"])
+    def test_historical_protocol_sample_matches_public_relay_receipts(self):
+        historical = self.root / "published-v0.1.0"
+        source_at(LEGACY, historical)
+        examples = historical / "examples"
+        examples.mkdir()
+        for filename in ("relay.py", "sample.json"):
+            (examples / filename).write_bytes(subprocess.check_output(
+                ["git", "show", f"{LEGACY}:examples/{filename}"], cwd=ROOT,
+            ))
 
-        entry_id = progress["result"]["entry"]["entry_id"]
-        original = self.call("entry-get", entry_id, cwd=self.root)
+        def relay(mode, client=None):
+            argv = [sys.executable, str(examples / "relay.py"), "--project", str(self.project), mode]
+            if client:
+                argv.extend(["--client", client, "--session", client + "-session"])
+            result = subprocess.run(argv, capture_output=True, timeout=15, cwd=self.caller, env=self.env)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+            return [json.loads(line) for line in result.stdout.splitlines()]
+
+        start = relay("start", "clientA")
+        read = relay("read")
+        resume = relay("resume", "clientB")
+        verify = relay("verify")
+        baseline = read[1]["reply"]
+        original = read[2]["reply"]
+        page = next(call["reply"] for call in verify if call["argv"][0] == "changes")
+        self.assertEqual(original["result"]["body_md"], start[3]["request"]["body_md"])
         self.assertEqual(original["result"]["body_md"], SAMPLE["progress"]["body_md"])
-        next_claim = self.request(identity, "next-claim", handed_off, client="clientB", session_id="sessionB")
-        claimed = self.call("claim", data=next_claim, cwd=self.root)
-        continuation = self.record(identity, claimed["result"]["task"], "continued", "continued")
-        continued = self.call("checkpoint", data=continuation, cwd=self.root)
-
-        page = self.page(identity, snapshot["result"]["watermark"], limit=2)
-        self.assertEqual(page["result"]["changes"], [claimed["result"], continued["result"]])
-        self.assertEqual(page["result"]["next_after"], continued["result"]["seq"])
-        self.assertEqual(continued["result"]["task"]["task_id"], handed_off["task_id"])
-        self.assertEqual(self.call("checkpoint", data=request), progress)
-        self.call("checkpoint", data={**request, "operation_id": "stale"}, code=4, error="stale_run")
-        for envelope in (snapshot, original, page):
-            self.assertEqual(envelope["protocol_version"], store.PROTOCOL_VERSION)
-            self.assertEqual(envelope["project_id"], identity["project_id"])
-            self.assertEqual(envelope["data_generation"], identity["data_generation"])
+        self.assertEqual(page["result"]["changes"][-2:], [call["reply"]["result"] for call in resume[-2:]])
+        self.assertEqual(start[4]["reply"]["result"]["task"], baseline["result"]["tasks"][0])
+        self.assertEqual(baseline["result"]["watermark"], 4)
+        self.assertEqual(page["result"]["next_after"], 6)
+        retry, rejected = (call["reply"] for call in verify if call["argv"][0] == "checkpoint")
+        self.assertEqual(retry, start[3]["reply"])
+        self.assertEqual(rejected["error"]["code"], "stale_run")
+        for envelope in (baseline, original, page):
+            self.assertEqual(envelope["protocol_version"], "1.0")
+            self.assertEqual(envelope["project_id"], baseline["project_id"])
+            self.assertEqual(envelope["data_generation"], baseline["data_generation"])
 
     def test_replay_script_is_standalone_and_uses_separate_callers(self):
         for mode, client, directory in (
@@ -377,7 +389,7 @@ sys.exit(worklog.main())
             argv = [sys.executable, str(ROOT / "examples" / "relay.py"), "--project", str(self.project), mode]
             if client:
                 argv.extend(["--client", client, "--session", client + "-session"])
-            result = subprocess.run(argv, capture_output=True, timeout=15, cwd=directory)
+            result = subprocess.run(argv, capture_output=True, timeout=15, cwd=directory, env=self.env)
             self.assertEqual(result.returncode, 0, result.stderr.decode())
             self.assertTrue(all("reply" in json.loads(line) for line in result.stdout.splitlines()))
 

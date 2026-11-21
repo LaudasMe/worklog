@@ -6,12 +6,12 @@ from pathlib import Path
 import tempfile
 
 from worklog_store import (
-    CONTEXT_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, SCHEMA_VERSION, WorklogError,
-    connect, metadata, schema_version,
+    CONTEXT_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, LIFECYCLE_SCHEMA_VERSION, SCHEMA_VERSION, WorklogError,
+    connect, metadata, require_project_id, schema_version,
 )
 
 
-def backup(path, destination):
+def backup(path, destination, *, expected_id=None):
     output = Path(destination).expanduser().resolve()
     if output.exists():
         raise WorklogError("backup_exists", "Backup destination already exists.")
@@ -22,6 +22,7 @@ def backup(path, destination):
         with closing(connect(path, "ro")) as source, closing(connect(temp, "rw")) as copy:
             source.execute("BEGIN")
             project = metadata(source)
+            require_project_id(project, expected_id)
             version = schema_version(source)
             source.backup(copy)
             if metadata(copy) != project or schema_version(copy) != version:
@@ -57,10 +58,14 @@ def install_context_schema(db):
 
 
 def install_lifecycle_schema(db):
-    install_schema(db, "schema_lifecycle.sql", SCHEMA_VERSION)
+    install_schema(db, "schema_lifecycle.sql", LIFECYCLE_SCHEMA_VERSION)
 
 
-def upgrade(path, backup_name):
+def install_v4_schema(db):
+    install_schema(db, "schema_v4.sql", SCHEMA_VERSION)
+
+
+def upgrade(path, backup_name, *, expected_id=None):
     copy_path = Path(backup_name).expanduser().resolve()
     if not copy_path.is_file() or copy_path.samefile(path):
         raise WorklogError("invalid_backup", "Supply a separate existing SQLite backup.")
@@ -69,6 +74,7 @@ def upgrade(path, backup_name):
         db.execute("PRAGMA foreign_keys = OFF")
         db.execute("BEGIN IMMEDIATE")
         project = metadata(db)
+        require_project_id(project, expected_id)
         version = schema_version(db)
         if version == SCHEMA_VERSION:
             raise WorklogError("already_upgraded", "Database is already at the current schema.")
@@ -82,6 +88,8 @@ def upgrade(path, backup_name):
                 raise WorklogError("invalid_backup", "Backup differs from the current database. Back up again.")
         if version == LEGACY_SCHEMA_VERSION:
             install_context_schema(db)
-        install_lifecycle_schema(db)
+        if version < LIFECYCLE_SCHEMA_VERSION:
+            install_lifecycle_schema(db)
+        install_v4_schema(db)
         check_integrity(db)
     return project, {"previous_schema_version": version, "schema_version": SCHEMA_VERSION}

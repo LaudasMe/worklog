@@ -5,11 +5,13 @@ import binascii
 import json
 
 from worklog_store import (
-    CONTEXT_VERSION, KINDS, WorklogError, context_supported, integer, json_text, origin,
-    task_row, watermark,
+    BLOCKED_DISPLAY_BASE_STATES, CONTEXT_VERSION, KINDS, OPEN_TASK_STATES, SCHEMA_VERSION,
+    TERMINAL_TASK_STATES, WorklogError, context_supported, effective_blockers_sql, integer,
+    json_text, origin, schema_version, task_row, watermark,
 )
 
-TASK_STATES = ("TODO", "IN_PROGRESS", "DONE")
+TASK_STATES = (*OPEN_TASK_STATES, *TERMINAL_TASK_STATES)
+DISPLAY_STATES = (*TASK_STATES, "BLOCKED")
 RECORD_STATES = ("OPEN", "RESOLVED", "CANCELLED", "CURRENT", "SUPERSEDED", "RECORDED")
 
 
@@ -30,9 +32,8 @@ def records_sql(db):
 
 def tasks_sql(db):
     if context_supported(db):
-        blocked = """
-            EXISTS(SELECT 1 FROM context_index b WHERE b.task_id = t.task_id
-                   AND b.kind = 'BLOCKER' AND b.status = 'OPEN')
+        blocked = f"""
+            EXISTS(SELECT 1 FROM ({effective_blockers_sql(db)}) b WHERE b.task_id = t.task_id)
         """
         updated = """
             MAX(t.updated_at, COALESCE((SELECT MAX(recorded_at) FROM context_records r
@@ -40,15 +41,23 @@ def tasks_sql(db):
         """
     else:
         blocked, updated = "0", "t.updated_at"
+    schema4 = schema_version(db) >= SCHEMA_VERSION
+    archived = "t.archived" if schema4 else "0"
+    priority = "t.priority" if schema4 else "NULL"
     return f"""
         WITH recorded AS ({records_sql(db)})
-        SELECT t.task_id AS id, t.number, t.title, t.status, {blocked} AS blocked,
-               {updated} AS updated_at, recent.summary, recent.id AS source_id, recent.command
-        FROM tasks t
-        LEFT JOIN recorded recent ON recent.id = (
-            SELECT r.id FROM recorded r WHERE r.task_id = t.task_id
-              AND r.kind IN ('PROGRESS', 'HANDOFF') AND r.status IN ('CURRENT', 'RECORDED')
-            ORDER BY r.recorded_at DESC, r.id ASC LIMIT 1
+        SELECT *, CASE WHEN blocked AND status IN {BLOCKED_DISPLAY_BASE_STATES}
+                       THEN 'BLOCKED' ELSE status END AS display_status
+        FROM (
+            SELECT t.task_id AS id, t.number, t.title, t.status, {blocked} AS blocked, {archived} AS archived,
+                   {priority} AS priority, {updated} AS updated_at, recent.summary, recent.id AS source_id,
+                   recent.command
+            FROM tasks t
+            LEFT JOIN recorded recent ON recent.id = (
+                SELECT r.id FROM recorded r WHERE r.task_id = t.task_id
+                  AND r.kind IN ('PROGRESS', 'HANDOFF') AND r.status IN ('CURRENT', 'RECORDED')
+                ORDER BY r.recorded_at DESC, r.id ASC LIMIT 1
+            )
         )
     """
 
@@ -57,13 +66,14 @@ def task_summary(row):
     result = dict(row)
     result["task_id"] = result.pop("id")
     result["blocked"] = bool(result["blocked"])
+    result["archived"] = bool(result["archived"])
     command, key = result.pop("command"), result.pop("source_id")
     result["source"] = origin(command, key) if key is not None else None
     return result
 
 
 def project_tasks(db):
-    return [task_summary(row) for row in db.execute(tasks_sql(db) + " ORDER BY t.number")]
+    return [task_summary(row) for row in db.execute(tasks_sql(db) + " WHERE archived = 0 ORDER BY number")]
 
 
 def record_summary(row):
@@ -98,17 +108,37 @@ def summaries(db, project, args):
     states = TASK_STATES if is_task else RECORD_STATES
     if args.status is not None and args.status not in states:
         raise WorklogError("invalid_input", f"Invalid {args.type} status. Expected one of: {', '.join(states)}.")
+    if args.display_status is not None and (not is_task or args.display_status not in DISPLAY_STATES):
+        raise WorklogError("invalid_input", "--display-status requires a known display status and --type task.")
     if args.kind is not None and (is_task or args.kind not in (*KINDS, "HANDOFF")):
         raise WorklogError("invalid_input", "--kind requires a known record kind and --type record.")
+    if args.view is not None and not is_task:
+        raise WorklogError("invalid_input", "--view requires --type task.")
+    if args.priority is not None and not is_task:
+        raise WorklogError("invalid_input", "--priority requires --type task.")
     limit = integer(args.limit, "limit", 1, 500)
     task_id = task_row(db, args.task, allow_number=True)["task_id"] if args.task is not None else None
     identity = [project["project_id"], project["data_generation"]]
     key = [*identity, args.type, args.status, args.kind, task_id, args.blocked]
+    if args.display_status is not None:
+        key.append(args.display_status)
+    if args.view is not None:
+        key.append(args.view)
+    if args.priority is not None:
+        key.append(args.priority)
     latest_position = db.execute("SELECT COALESCE(MAX(position), 0) FROM context_records").fetchone()[0] \
         if context_supported(db) else 0
     stamp = [watermark(db), latest_position]
     time_field = "updated_at" if is_task else "recorded_at"
     conditions, params = [], []
+    if is_task:
+        conditions.append("archived = ?")
+        params.append(args.view == "archived")
+    if args.view == "pending":
+        conditions.append(f"status IN {OPEN_TASK_STATES}")
+    if args.priority is not None:
+        conditions.append("priority = ?")
+        params.append(args.priority)
     if task_id is not None:
         conditions.append("id = ?" if is_task else "(task_id = ? OR related_task_id = ?)")
         params.extend([task_id] if is_task else [task_id, task_id])
@@ -117,6 +147,9 @@ def summaries(db, project, args):
         params.append(args.status)
     elif not is_task:
         conditions.append("status <> 'SUPERSEDED'")
+    if args.display_status is not None:
+        conditions.append("display_status = ?")
+        params.append(args.display_status)
     if args.kind is not None:
         conditions.append("kind = ?")
         params.append(args.kind)
