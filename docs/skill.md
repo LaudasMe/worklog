@@ -1,6 +1,6 @@
 # 安装和使用 workLog Skill
 
-这个本机候选包包含 Codex 与 OpenCode 共用的 `SKILL.md`、Python CLI 和命令参考。使用 Python 3.9 或以上和 `unzip`。从当前源码构建的 CLI 支持任务状态、优先级、项目登记及公开只读协议 2.0。公开读取要求 schema 4。用 `context` 和 `summaries` 可以先核对旧库，再按需要备份和升级。命令见包内 `references/commands.md`。
+workLog Skill 安装包包含 Codex 与 OpenCode 共用的 `SKILL.md`、Python CLI 和命令参考。使用 Python 3.9 或以上和 `unzip`。随包 CLI 支持任务状态、优先级、项目登记及公开只读协议 2.0。公开读取要求 schema 4。用 `context` 和 `summaries` 可以先核对旧库，再按需要备份和升级。命令见包内 `references/commands.md`。
 
 ## 取得安装包
 
@@ -48,7 +48,7 @@ test ! -e "$SKILLS_DIR/worklog" &&
 ## 从新会话复跑验收
 
 1. 创建两个合成 Git 项目并安装同一个 ZIP。用仓库的 `examples/context_seed.py` 准备第一个项目，传入 `--alternate` 准备第二个。记录各自的项目 ID、任务 ID、数据库 SHA-256 和 2.0 快照。
-2. 在 Codex 和 OpenCode 分别开启新会话，通过各自原生的 Skill 入口加载候选包并请求只读查询。核对安装位置、任务 ID、状态和摘要，比较数据库 SHA-256 与快照。
+2. 在 Codex 和 OpenCode 分别开启新会话，通过各自原生的 Skill 入口加载安装包并请求只读查询。核对安装位置、任务 ID、状态和摘要，比较数据库 SHA-256 与快照。
 3. 在北辰项目根开启一个新会话。只告诉它使用 Skill，先通过摘要找到当前任务，再读项目和任务上下文，根据待办执行实际工作并写回。另开新会话，只读复查摘要、当前上下文、已关闭事项、尚未关闭的问题和被替换决定的原文。
 4. 检查北辰的新进展与实际文件，比较南星数据库的前后哈希和项目数据。跨客户端接棒可单独用 `claim`、`checkpoint`、`handoff` 复跑。
 5. 在单独的合成项目里新建任务，请 Skill 显式开始、保存一条带任务关联的验证日志，再引用该日志标记完成。另开只读会话，通过原生入口加载同一份 Skill，筛选 `DONE` 后用 `context --task T001` 获取完成依据，按其命令和 ID 读回原文。核对新会话读取前后的数据库哈希。

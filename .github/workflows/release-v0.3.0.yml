@@ -1,0 +1,55 @@
+name: Publish workLog v0.3.0
+
+on:
+  push:
+    tags:
+      - v0.3.0
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'LaudasMe/worklog'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source and migration fixtures
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test the release
+        run: python3 -B -m unittest discover -s tests -v
+      - name: Build and check the Skill package
+        run: |
+          output="${RUNNER_TEMP}/worklog-release"
+          python3 -B scripts/package_skill.py --output-dir "$output"
+          cd "$output"
+          python3 -m zipfile -t worklog-skill-v0.3.0.zip
+          python3 -m zipfile -e worklog-skill-v0.3.0.zip check
+          test "$(python3 -B check/worklog/scripts/worklog.py --version)" = 'workLog CLI protocol 2.0'
+          sha256sum worklog-skill-v0.3.0.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Publish the tagged ZIP and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          output="${RUNNER_TEMP}/worklog-release"
+          gh release create "$GITHUB_REF_NAME" \
+            "$output/worklog-skill-v0.3.0.zip" "$output/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title 'workLog v0.3.0' \
+            --latest --notes-file - <<'NOTES'
+          ## 任务状态与优先级
+
+          - 支持显式开始、凭日志完成、暂停和恢复、取消、归档和重开。暂停交接后可以接手，任务保持暂停。完成依据与历史原文可回查。
+          - 优先级可选 p0 至 p3，省略时显示未设置。任务列表支持按状态、归档、阻塞和优先级组合查询。
+          - 项目初始化后自动登记。可显式补登、移动和停用项目，并逐项目备份和升级。
+
+          ## 协议与升级
+
+          公开只读协议使用 2.0。原 1.0 连接器需要升级，并从 2.0 快照建立读取位置。已使用 schema 4 的项目可直接读取；schema 1、2、3 的项目应先备份，再升级到 schema 4。
+
+          下载 `worklog-skill-v0.3.0.zip` 和 `SHA256SUMS`。在同一目录运行 `shasum -a 256 -c SHA256SUMS` 后，按[安装说明](https://github.com/LaudasMe/worklog/blob/v0.3.0/docs/skill.md)更新 Codex 和 OpenCode 的 Skill。
+
+          [公开只读协议 2.0](https://github.com/LaudasMe/worklog/blob/v0.3.0/docs/read-protocol.md) · [备份与升级](https://github.com/LaudasMe/worklog/blob/v0.3.0/docs/context-cli.md#备份和升级)
+          NOTES
