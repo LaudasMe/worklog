@@ -9,7 +9,7 @@ from worklog_store import (
     task_row, watermark,
 )
 
-TASK_STATES = ("TODO", "IN_PROGRESS")
+TASK_STATES = ("TODO", "IN_PROGRESS", "DONE")
 RECORD_STATES = ("OPEN", "RESOLVED", "CANCELLED", "CURRENT", "SUPERSEDED", "RECORDED")
 
 

@@ -9,12 +9,12 @@ import sys
 
 from worklog_context import context, record, record_get
 
-from worklog_store import (PROTOCOL_VERSION, WorklogError, connect, initialize,
+from worklog_store import (PROTOCOL_VERSION, TASK_LIFECYCLE_WRITES, WorklogError, connect, initialize,
                            json_text, metadata, project_db, read_request, write_request)
 from worklog_upgrade import backup, upgrade
 from worklog_summaries import summaries
 
-WRITES = ("task-create", "claim", "checkpoint", "handoff", "record")
+WRITES = ("task-create", *TASK_LIFECYCLE_WRITES, "claim", "checkpoint", "handoff", "record")
 EXIT_CODES = {
     "invalid_input": 2, "invalid_project_path": 2,
     "not_initialized": 3, "task_not_found": 3, "entry_not_found": 3, "record_not_found": 3,
@@ -22,6 +22,8 @@ EXIT_CODES = {
     "operation_conflict": 4, "project_mismatch": 4, "generation_mismatch": 4, "cursor_ahead": 4,
     "backup_exists": 4, "already_upgraded": 4, "invalid_backup": 4,
     "upgrade_required": 4, "record_conflict": 4, "cursor_stale": 4,
+    "task_state_conflict": 4, "invalid_evidence": 4, "task_blocked": 4,
+    "todo_disposition_required": 4, "protocol_incompatible": 4,
     "database_busy": 5,
 }
 

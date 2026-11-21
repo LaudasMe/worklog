@@ -15,7 +15,10 @@ PROTOCOL_VERSION = "1.0"
 CONTEXT_VERSION = "1.0"
 KINDS = ("GOAL", "CONSTRAINT", "DECISION", "DOCUMENT", "PROGRESS", "QUESTION", "TODO", "BLOCKER")
 LEGACY_SCHEMA_VERSION = 1
-SCHEMA_VERSION = 2
+CONTEXT_SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+TASK_LIFECYCLE_WRITES = ("task-start", "task-complete")
+LEGACY_TASK_STATES = ("TODO", "IN_PROGRESS")
 CAPABILITIES = ["identity", "task-get", "snapshot", "changes", "entry-get"]
 MAX_SEQUENCE = 2**63 - 1
 ENTRY_FIELDS = (
@@ -63,7 +66,7 @@ def schema_version(db):
 
 
 def context_supported(db):
-    return schema_version(db) == SCHEMA_VERSION
+    return schema_version(db) >= CONTEXT_SCHEMA_VERSION
 
 
 def origin(command, key):
@@ -71,7 +74,7 @@ def origin(command, key):
 
 
 def metadata(db):
-    if schema_version(db) not in (LEGACY_SCHEMA_VERSION, SCHEMA_VERSION):
+    if schema_version(db) not in (LEGACY_SCHEMA_VERSION, CONTEXT_SCHEMA_VERSION, SCHEMA_VERSION):
         raise WorklogError("unsupported_schema", "Unsupported workLog database schema.")
     project = db.execute("SELECT project_id, data_generation, name FROM project").fetchone()
     if project is None:
@@ -111,12 +114,13 @@ def initialize(path, request):
     if not path.is_file():
         schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
         context_schema = Path(__file__).with_name("schema_context.sql").read_text(encoding="utf-8")
+        lifecycle_schema = Path(__file__).with_name("schema_lifecycle.sql").read_text(encoding="utf-8")
         fd, filename = tempfile.mkstemp(prefix=".init-", dir=path.parent)
         os.close(fd)
         temporary = Path(filename)
         try:
             with closing(connect(temporary, "rw")) as db:
-                db.executescript("BEGIN IMMEDIATE;\n" + schema + context_schema)
+                db.executescript("BEGIN IMMEDIATE;\n" + schema + context_schema + lifecycle_schema)
                 db.execute("INSERT INTO project VALUES (1, ?, ?, ?)", (uid(), uid(), name))
                 db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 db.commit()
@@ -169,20 +173,25 @@ def latest_entry(db, task_id, kind=None):
 def task_view(db, task):
     task_id = task["task_id"]
     latest = latest_entry(db, task_id)
-    return {
+    result = {
         **dict(task),
         "active_run": open_run(db, task_id),
         "latest_entry": latest,
         "latest_handoff": latest_entry(db, task_id, "HANDOFF"),
         "next_step": latest["next_step"] if latest else None,
     }
+    completion = result.pop("completion_json", None)
+    if completion is not None:
+        result["completion"] = json.loads(completion)
+    return result
 
 
 def create_task(db, request, at):
     title = string_field(request, "title")
     last = db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
     task_id = uid()
-    db.execute("INSERT INTO tasks VALUES (?, ?, ?, 'TODO', 1, ?, ?)",
+    db.execute("INSERT INTO tasks (task_id, number, title, status, revision, created_at, updated_at)"
+               " VALUES (?, ?, ?, 'TODO', 1, ?, ?)",
                (task_id, f"T{last + 1:03}", title, at, at))
     return task_id, None
 
@@ -202,6 +211,73 @@ def claim_task(db, request, task_id, active, at):
     db.execute("INSERT INTO task_runs VALUES (?, ?, ?, ?, ?, 'OPEN', ?, NULL)",
                (uid(), task_id, client, session, os.getcwd(), at))
     db.execute("UPDATE tasks SET status = 'IN_PROGRESS' WHERE task_id = ?", (task_id,))
+
+
+def require_task_state(task, allowed):
+    if task["status"] not in allowed:
+        raise WorklogError("task_state_conflict", "This operation is unavailable in the current task state.",
+                           status=task["status"], expected=list(allowed))
+
+
+def completion_sources(db, task_id, evidence):
+    if not isinstance(evidence, list) or not evidence:
+        raise WorklogError("invalid_input", "evidence must be a non-empty array of work records.")
+    sources = []
+    for ref in evidence:
+        if not isinstance(ref, dict) or ref.get("type") not in ("RECORD", "ENTRY"):
+            raise WorklogError("invalid_input", "Each completion reference must select a RECORD or ENTRY.")
+        if ref["type"] == "RECORD":
+            require_fields(ref, ("type", "target_record_id"))
+            key = string_field(ref, "target_record_id")
+            row = db.execute(
+                "SELECT 1 FROM context_index WHERE record_id = ? AND kind = 'PROGRESS'"
+                " AND status = 'CURRENT' AND COALESCE(task_id, related_task_id) = ?", (key, task_id),
+            ).fetchone()
+            command = "record-get"
+        else:
+            require_fields(ref, ("type", "target_entry_id"))
+            key = string_field(ref, "target_entry_id")
+            row = db.execute("SELECT 1 FROM entries WHERE entry_id = ? AND task_id = ?",
+                             (key, task_id)).fetchone()
+            command = "entry-get"
+        if row is None:
+            raise WorklogError("invalid_evidence", "Choose an existing, current work record for this task.",
+                               source=origin(command, key))
+        sources.append(origin(command, key))
+    return sources
+
+
+def complete_task(db, task, request, active, at):
+    require_task_state(task, LEGACY_TASK_STATES)
+    task_id = task["task_id"]
+    completed_scope = string_field(request, "completed_scope")
+    sources = completion_sources(db, task_id, request["evidence"])
+    dispositions = request.get("todo_dispositions", {})
+    if not isinstance(dispositions, dict):
+        raise WorklogError("invalid_input", "todo_dispositions must be an object keyed by record ID.")
+    for key in dispositions:
+        string_field(dispositions, key)
+
+    open_items = db.execute(
+        "SELECT record_id, kind, summary FROM context_index WHERE task_id = ? AND status = 'OPEN'"
+        " AND kind IN ('TODO', 'BLOCKER') ORDER BY position", (task_id,),
+    ).fetchall()
+    blockers = [dict(row) for row in open_items if row["kind"] == "BLOCKER"]
+    if blockers:
+        raise WorklogError("task_blocked", "Resolve or cancel the open task blockers before completing.",
+                           blockers=blockers)
+    todos = [dict(row) for row in open_items if row["kind"] == "TODO"]
+    if dispositions.keys() != {todo["record_id"] for todo in todos}:
+        raise WorklogError("todo_disposition_required", "Supply a disposition for each current open task TODO.",
+                           todos=todos)
+
+    completion = {"completed_at": at, "completed_scope": completed_scope, "evidence": sources,
+                  "todo_dispositions": dispositions}
+    if active:
+        db.execute("UPDATE task_runs SET state = 'CLOSED', closed_at = ? WHERE run_id = ?",
+                   (at, active["run_id"]))
+    db.execute("UPDATE tasks SET status = 'DONE', completion_json = ? WHERE task_id = ?",
+               (json_text(completion), task_id))
 
 
 def record_entry(db, command, request, task_id, run_id, at):
@@ -230,8 +306,15 @@ def require_project(project, project_id, data_generation):
 def write_request(db, project, command, request):
     common = ("operation_id", "project_id", "data_generation")
     task_fields = ("task_id", "expected_revision")
+    lifecycle = command in TASK_LIFECYCLE_WRITES
+    if lifecycle and schema_version(db) != SCHEMA_VERSION:
+        raise WorklogError("upgrade_required", "Back up and upgrade before changing task status.")
     if command == "task-create":
         require_fields(request, common + ("title",))
+    elif command == "task-start":
+        require_fields(request, common + task_fields)
+    elif command == "task-complete":
+        require_fields(request, common + task_fields + ("completed_scope", "evidence"), ("todo_dispositions",))
     elif command == "claim":
         require_fields(request, common + task_fields + ("client", "session_id"), ("replaces_run_id",))
     else:
@@ -246,7 +329,7 @@ def write_request(db, project, command, request):
         if prior["request_hash"] != digest:
             raise WorklogError("operation_conflict", "Operation ID already belongs to a different request.")
         return change_view(prior)
-    if schema_version(db) == SCHEMA_VERSION and db.execute(
+    if context_supported(db) and db.execute(
         "SELECT 1 FROM context_operations WHERE operation_id = ?", (operation,)
     ).fetchone():
         raise WorklogError("operation_conflict", "Operation ID already belongs to a context request.")
@@ -255,20 +338,26 @@ def write_request(db, project, command, request):
     if command == "task-create":
         task_id, entry = create_task(db, request, at)
     else:
-        task_id = string_field(request, "task_id")
         expected_revision = integer(request["expected_revision"], "expected_revision", 1)
-        task = task_row(db, task_id)
+        task = task_row(db, string_field(request, "task_id"), allow_number=lifecycle)
+        task_id = task["task_id"]
         active = open_run(db, task_id)
-        run_id = None if command == "claim" else string_field(request, "run_id")
+        run_id = string_field(request, "run_id") if command in ("checkpoint", "handoff") else None
         if run_id is not None and (active is None or active["run_id"] != run_id):
             raise WorklogError("stale_run", "The supplied run is no longer the active task run.",
                                active_run=active)
         if task["revision"] != expected_revision:
             raise WorklogError("revision_conflict", "Task changed since it was read.",
                                current_revision=task["revision"], active_run=active)
-        if command == "claim":
+        entry = None
+        if command == "task-start":
+            require_task_state(task, ("TODO",))
+            db.execute("UPDATE tasks SET status = 'IN_PROGRESS' WHERE task_id = ?", (task_id,))
+        elif command == "task-complete":
+            complete_task(db, task, request, active, at)
+        elif command == "claim":
+            require_task_state(task, LEGACY_TASK_STATES)
             claim_task(db, request, task_id, active, at)
-            entry = None
         else:
             entry = record_entry(db, command, request, task_id, run_id, at)
         db.execute("UPDATE tasks SET revision = revision + 1, updated_at = ? WHERE task_id = ?",
@@ -291,9 +380,20 @@ def watermark(db):
     return db.execute("SELECT COALESCE(MAX(seq), 0) FROM changes").fetchone()[0]
 
 
+def protocol_incompatible():
+    return WorklogError("protocol_incompatible",
+                        "Protocol 1.0 cannot represent these task data. Use context or summaries locally.")
+
+
+def legacy_task_view(db, task):
+    if task["status"] not in LEGACY_TASK_STATES:
+        raise protocol_incompatible()
+    return task_view(db, task)
+
+
 def snapshot(db):
     at = watermark(db)
-    tasks = [task_view(db, task) for task in db.execute("SELECT * FROM tasks ORDER BY rowid")]
+    tasks = [legacy_task_view(db, task) for task in db.execute("SELECT * FROM tasks ORDER BY rowid")]
     entries = [dict(row) for row in db.execute(entry_query(ENTRY_FIELDS) + " ORDER BY e.position")]
     return {"watermark": at, "tasks": tasks, "entry_refs": entries}
 
@@ -307,6 +407,8 @@ def changes(db, project, args):
         raise WorklogError("cursor_ahead", "Cursor exceeds the current watermark.", watermark=high)
     rows = db.execute("SELECT * FROM changes WHERE seq > ? ORDER BY seq LIMIT ?", (after, limit))
     result = [change_view(row) for row in rows]
+    if any(change["kind"] in TASK_LIFECYCLE_WRITES for change in result):
+        raise protocol_incompatible()
     cursor = result[-1]["seq"] if result else after
     return {"changes": result, "next_after": cursor, "has_more": cursor < high, "watermark": high}
 
@@ -315,7 +417,7 @@ def read_request(db, project, command, args):
     if command == "identity":
         return identity(project)
     if command == "task-get":
-        return task_view(db, task_row(db, args.task, allow_number=True))
+        return legacy_task_view(db, task_row(db, args.task, allow_number=True))
     if command == "snapshot":
         return snapshot(db)
     if command == "changes":
