@@ -2,13 +2,13 @@
 """Build the offline workLog Skill release ZIP from tracked source files."""
 
 import argparse
+import json
 from pathlib import Path
 import stat
 from tempfile import NamedTemporaryFile
 from zipfile import ZipFile, ZipInfo, ZIP_STORED
 
 ROOT = Path(__file__).resolve().parents[1]
-FILENAME = "worklog-skill-v0.3.0.zip"
 FILES = (
     ("worklog/SKILL.md", "skills/worklog/SKILL.md"),
     ("worklog/INSTALL.md", "docs/skill.md"),
@@ -23,12 +23,15 @@ FILES = (
     ("worklog/scripts/worklog_summaries.py", "worklog_summaries.py"),
     ("worklog/scripts/worklog_upgrade.py", "worklog_upgrade.py"),
     ("worklog/scripts/worklog_projects.py", "worklog_projects.py"),
+    ("worklog/scripts/worklog_release.py", "worklog_release.py"),
+    ("worklog/scripts/release-version.json", "release-version.json"),
 )
 
 
 def build_package(output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
-    destination = output_dir / FILENAME
+    version = json.loads((ROOT / "release-version.json").read_text(encoding="utf-8"))["version"]
+    destination = output_dir / f"worklog-skill-{version}.zip"
     with NamedTemporaryFile(prefix=".worklog-skill-", dir=output_dir, delete=False) as temporary:
         temporary_path = Path(temporary.name)
     try:

@@ -16,16 +16,16 @@ python3 -B scripts/package_skill.py --output-dir "$PACKAGE_DIR"
 首次安装请选一个独立的 Git 项目根。把以下路径替换为实际绝对路径。两端从这个根目录或子目录启动新会话。ZIP 自带 `worklog/` 目录。
 
 ```sh
-SKILL_ZIP="/absolute/path/to/worklog-skill-v0.3.0.zip"
+SKILL_ZIP="/absolute/path/to/worklog-skill-v0.4.0.zip"
 PROJECT_ROOT="/absolute/path/to/project-root"
 SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 mkdir -p "$SKILLS_DIR"
 test ! -e "$SKILLS_DIR/worklog" &&
   unzip -n "$SKILL_ZIP" -d "$SKILLS_DIR" &&
-  python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" --version
+  python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" release-version
 ```
 
-命令会先检查是否已有 worklog 安装。当前 CLI 的版本输出为 `workLog CLI protocol 2.0`。升级时把新版本先解压到临时目录，用解压后的 CLI 执行 `--version` 核对协议，再整体替换 `.agents/skills/worklog/` 并开启新会话。每个工作项目的 SQLite 数据位于自己的 `.worklog/`。两端的登记共用 `~/.local/share/worklog/projects.json`，两者均独立于 Skill 安装目录。移除 Skill 时只移除安装的 `.agents/skills/worklog/` 目录。
+命令会先检查是否已有 workLog 安装。当前发布版本为 `v0.4.0`，CLI 的 `--version` 输出为 `workLog CLI protocol 2.0`。升级时先把新版本解压到临时目录，用解压后的 CLI 执行 `release-version` 核对发布版本和协议，再整体替换 `.agents/skills/worklog/` 并开启新会话。每个工作项目的 SQLite 数据位于自己的 `.worklog/`。两端的登记共用 `~/.local/share/worklog/projects.json`，两者均独立于 Skill 安装目录。移除 Skill 时只移除安装的 `.agents/skills/worklog/` 目录。
 
 如要多项目共用，可用相同方法解压到 `~/.agents/skills/` 并开启新会话。项目和用户级目录只保留一个用于当前验收的 `worklog` 定义，便于核对实际加载版本。两个客户端仍通过你确认的项目路径定位数据。
 
@@ -33,6 +33,8 @@ test ! -e "$SKILLS_DIR/worklog" &&
 
 在 Codex 中通过 Skill 选择器选择 `worklog`。在 OpenCode 中请 Agent 通过内置 `skill` 工具加载 `worklog`。从项目根发起请求时可直接说「当前项目」。跨目录或有多个可能项目时给出项目绝对路径。
 
+- 「查询当前用的是哪个 workLog 版本。」
+- 「检查 workLog 是否有更新。」
 - 「查看这个项目的 T001 进展和最近交接。」
 - 「用 workLog 摘要发现当前项目中的任务，读取项目和任务上下文。继续其中待做的验证，并把确认的结果写回。」
 - 「开始 T001。」
@@ -44,6 +46,17 @@ test ! -e "$SKILLS_DIR/worklog" &&
 - 「把 T001 交接出去，说明下一位应该核对什么。」
 
 空项目可明确请 Skill 「初始化 workLog，项目名称为北辰样例」并「新建一个任务，标题为核对金额」。数据已经初始化时，查看请求可直接执行。开始任务无需接手。标记完成时引用已有日志。需要交接时，当前会话须持有对应任务的接手。查询已完成任务使用 `context --task T001`。
+
+版本查询和更新检查可在任意目录执行。用实际加载的 Skill 目录定位下列脚本。更新检查会访问 GitHub Releases，返回对应正式版及链接，由用户手动下载和安装。
+
+```sh
+python3 -B "/absolute/path/to/worklog/scripts/worklog.py" release-version
+python3 -B "/absolute/path/to/worklog/scripts/worklog.py" check-update
+```
+
+发布版本缺失时会显示「无法识别」。本机版本未知或远程查询失败时，更新状态显示「无法判断」。再次执行 `check-update` 可重试。
+
+Codex 聊天第一次使用 workLog 或查询当前版本时，Skill 会在单独的命令调用中为 `release-version` 加上 `env WORKLOG_CODEX_SKILL=1`。同一聊天的 workLog 侧栏可据此识别 Skill 使用的版本。OpenCode 中请核对 `skill` 工具返回的安装目录和 CLI 实际命令路径。
 
 ## 从新会话复跑验收
 

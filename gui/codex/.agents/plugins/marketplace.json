@@ -1,0 +1,20 @@
+{
+  "name": "worklog-codex-local",
+  "interface": {
+    "displayName": "workLog"
+  },
+  "plugins": [
+    {
+      "name": "worklog-codex",
+      "source": {
+        "source": "local",
+        "path": "./worklog-panel"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

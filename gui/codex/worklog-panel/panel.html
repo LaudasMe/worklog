@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="zh-Hans">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workLog</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    font: 14px/1.6 system-ui, sans-serif;
+    --text: #232830;
+    --muted: #5b6574;
+    --page: #fff;
+    --surface: #f2f4f8;
+    --line: #d8dde5;
+    --accent: #214e83;
+    --selected: #ebf2fd;
+    --selected-border: #9aafc6;
+    --todo: #687689;
+    --in-progress: #2866aa;
+    --blocked: #ad3c45;
+    --paused: #976019;
+    --done: #2a755b;
+    --cancelled: #78578f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --text: #e9edf2;
+      --muted: #abb6c6;
+      --page: #202226;
+      --surface: #2a2e36;
+      --line: #414955;
+      --accent: #9cc5ff;
+      --selected: #293d57;
+      --selected-border: #537ba6;
+      --todo: #aebacb;
+      --in-progress: #8bbdff;
+      --blocked: #f39ba2;
+      --paused: #e6b16e;
+      --done: #82c8ab;
+      --cancelled: #c3a4dc;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; color: var(--text); background: var(--page); }
+  h1, h2, h3, h4, p { margin: 0; }
+  button {
+    border: 0;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .icon {
+    width: 1.15em;
+    height: 1.15em;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .project-header { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .wordmark { font-size: 16px; font-weight: 700; }
+  #project-name {
+    padding-inline-start: 12px;
+    margin-inline-start: 12px;
+    border-inline-start: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+  #check-updates { margin-inline-start: auto; white-space: nowrap; }
+  main { padding: 16px; overflow-wrap: anywhere; }
+  #panel-status, .empty, .meta { color: var(--muted); font-size: 12px; }
+  .list-header, .list-title, .list-actions, .filter-label, .badge, .handoff-header, .original h4, .meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #refresh-status { margin-top: 5px; }
+  .list-header { justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; }
+  .list-title { font-size: 19px; line-height: 1.3; }
+  .list-title .icon, .fact > .icon, .handoff-icon, .original .icon { color: var(--muted); }
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(83px, 100%), 1fr));
+    gap: 4px;
+    padding: 4px;
+    margin: 12px 0 10px;
+    background: var(--surface);
+    border-radius: 9px;
+  }
+  .filter {
+    display: grid;
+    place-items: center;
+    gap: 3px;
+    padding: 3px 4px 5px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .filter:hover { background: var(--page); }
+  .filter[aria-pressed="true"] {
+    color: var(--accent);
+    font-weight: 650;
+    background: var(--selected);
+    border-color: var(--selected-border);
+  }
+  .filter-track {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    width: 100%;
+    height: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .filter-bar {
+    width: 40%;
+    height: var(--bar-height);
+    border-radius: 2px 2px 0 0;
+    background: var(--status-color, var(--muted));
+    opacity: .53;
+  }
+  .filter[aria-pressed="true"] .filter-bar { opacity: 1; }
+  .filter-label .icon, .badge .icon { color: var(--status-color, var(--muted)); }
+  .task { padding: 12px 0; border-top: 1px solid var(--line); }
+  .task-toggle {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 7px;
+    width: 100%;
+    padding: 0;
+    text-align: start;
+  }
+  .task-toggle .icon-chevron { width: 10px; margin-top: 4px; color: var(--muted); }
+  [aria-expanded="true"] > .icon-chevron { rotate: 90deg; }
+  .task-title { font-size: 15px; font-weight: 700; line-height: 1.45; }
+  .task-meta { justify-content: end; flex-wrap: wrap; gap: 2px 6px; font-weight: 400; }
+  .badge {
+    gap: 4px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--status-color) 11%, var(--page));
+    white-space: nowrap;
+  }
+  .facts, .task-detail { margin-inline-start: 17px; }
+  .facts { display: grid; gap: 4px; margin-top: 8px; }
+  .fact { display: grid; grid-template-columns: 16px 4.05em minmax(0, 1fr); align-items: start; gap: 5px; }
+  .fact > .icon { margin-top: .18em; }
+  .fact .meta { flex-wrap: wrap; gap: 2px 4px; }
+  .fact-key { font-size: 12px; color: var(--muted); line-height: 1.9; }
+  .next .fact-key, .next > .icon, .next-value { color: var(--text); font-weight: 650; }
+  .task-detail { padding-top: 10px; margin-top: 12px; border-top: 1px solid var(--line); }
+  .handoff-header { flex-wrap: wrap; gap: 2px 7px; }
+  .handoff-header h3 { font-size: 14px; }
+  .handoff-icon {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--surface);
+  }
+  .handoff-summary, .original { margin: 6px 0 0 27px; }
+  .text-button {
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .text-button:not(:disabled):hover { text-decoration: underline; }
+  .text-button:disabled { color: var(--muted); cursor: default; }
+  .text-button .icon-chevron { rotate: 90deg; }
+  .text-button[aria-expanded="true"] .icon-chevron { rotate: -90deg; }
+  .original {
+    border-inline-start: 2px solid var(--line);
+    padding: 9px 11px;
+    background: var(--surface);
+    border-start-end-radius: 6px;
+    border-end-end-radius: 6px;
+  }
+  .original h4 { font-size: 13px; color: var(--muted); }
+  .progress-value, .next-value, .handoff-summary, .original-text, .original-next p { white-space: pre-wrap; }
+  .original-text, .original-next p { margin-top: 6px; }
+  .original-next { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .original-next h4 { color: var(--text); }
+  .original .empty { margin-top: 4px; }
+  .task-sections { margin-top: 12px; }
+  .task-section, .history-entries > li + li { border-top: 1px solid var(--line); }
+  .task-section summary, .history-entry summary { list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .section-toggle, .history-toggle {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    min-height: 40px;
+    padding: 6px 5px 6px 0;
+    border-radius: 4px;
+  }
+  .section-toggle:hover, .history-toggle:hover { background: var(--surface); }
+  .section-toggle > .icon, .history-icon, .todo-items .icon { color: var(--muted); }
+  .section-heading, .history-caption { font-weight: 650; }
+  .section-heading .meta { display: inline; margin-inline-start: 8px; font-weight: 400; }
+  summary .icon-chevron { color: var(--accent); }
+  details[open] > summary .icon-chevron { rotate: 90deg; }
+  .section-content { padding: 0 0 8px 24px; }
+  .section-content > .empty { margin: 5px 0; }
+  .todo-items, .history-entries { list-style: none; margin: 0; padding: 0; }
+  .todo-items li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 7px; padding: 4px 0; }
+  .todo-items li > .icon, .history-icon { margin-top: 3px; }
+  .todo-status { display: inline; margin-inline-end: 6px; }
+  .todo-outcome { display: block; white-space: pre-wrap; }
+  .processed-toggle, .history-action { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; }
+  .processed-toggle { min-height: 34px; }
+  .history-toggle { align-items: start; }
+  .history-meta { flex-wrap: wrap; gap: 2px 7px; }
+  .history-kind { color: var(--text); }
+  .history-action { margin-top: 2px; }
+  .history-entry:not([open]) .history-hide, .history-entry[open] .history-show { display: none; }
+  .history-entry > .original { margin: 0 0 8px; }
+  .details-state { margin-top: 8px; }
+  #updates-view { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
+  .update-component h2 { font-size: 14px; }
+  .update-component + .update-component { margin-top: 10px; }
+  .update-component dl { margin: 3px 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 8px; }
+  .update-component dt { color: var(--muted); font-size: 12px; }
+  .update-component dd { margin: 0; }
+  .release-link { color: var(--accent); font-size: 12px; }
+  .release-address { user-select: all; }
+  .tasks-empty { padding: 10px 0; border-top: 1px solid var(--line); }
+  [data-status="TODO"] { --status-color: var(--todo); }
+  [data-status="IN_PROGRESS"] { --status-color: var(--in-progress); }
+  [data-status="BLOCKED"] { --status-color: var(--blocked); }
+  [data-status="PAUSED"] { --status-color: var(--paused); }
+  [data-status="DONE"] { --status-color: var(--done); }
+  [data-status="CANCELLED"] { --status-color: var(--cancelled); }
+  @media (max-width: 310px) {
+    .project-header { padding-inline: 12px; }
+    main { padding-inline: 12px; }
+    .task-toggle { grid-template-columns: 10px minmax(0, 1fr); gap: 2px 7px; }
+    .task-meta { grid-column: 2; justify-content: start; }
+    .section-content { padding-inline-start: 8px; }
+    .history-toggle { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px; }
+  }
+</style>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute">
+  <symbol id="icon-list" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="5" rx="1"/><path d="M12 5h8m-8 6h8M3 15l2 2 4-4m3 5h8"/></symbol>
+  <symbol id="icon-all" viewBox="0 0 24 24"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5"/></symbol>
+  <symbol id="icon-todo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/></symbol>
+  <symbol id="icon-blocked" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></symbol>
+  <symbol id="icon-paused" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6m4-6v6"/></symbol>
+  <symbol id="icon-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="icon-cancelled" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="icon-progress" viewBox="0 0 24 24"><path d="M2 12h4L9 3l5 18 3-9h5"/></symbol>
+  <symbol id="icon-next" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+  <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 4v5h5m-5 0a9 9 0 1 1 .9 8M12 7v5l3 2"/></symbol>
+  <symbol id="icon-handoff" viewBox="0 0 24 24"><path d="M20 7H4m4-4L4 7l4 4m-4 6h16m-4-4 4 4-4 4"/></symbol>
+  <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM13 3v5h5M9 11h6m-6 4h6m-6 3h4"/></symbol>
+  <symbol id="icon-handoff-next" viewBox="0 0 24 24"><path d="M4 4v7a4 4 0 0 0 4 4h11m-5-5 5 5-5 5"/></symbol>
+</svg>
+<header class="project-header">
+  <span class="wordmark">workLog</span>
+  <span id="project-name" hidden></span>
+  <button type="button" id="check-updates" class="text-button" disabled>检查更新</button>
+</header>
+<main>
+  <section id="updates-view" aria-label="更新检查结果" hidden></section>
+  <p id="panel-status" role="status">正在读取 workLog 任务…</p>
+  <button type="button" id="retry-project" class="text-button" hidden>重试读取任务</button>
+  <section id="tasks-view" aria-labelledby="list-heading" hidden>
+    <header class="list-header">
+      <h1 id="list-heading" class="list-title"><svg class="icon" aria-hidden="true"><use href="#icon-list"/></svg>任务列表</h1>
+      <div class="list-actions">
+        <p id="visible-count" class="meta" role="status"></p>
+        <button type="button" id="refresh" class="text-button" aria-label="刷新任务列表">刷新</button>
+      </div>
+    </header>
+    <p id="refresh-status" class="empty" role="status" hidden></p>
+    <div id="filters" class="filters" role="group" aria-label="按状态筛选任务"></div>
+    <div id="tasks"></div>
+    <p id="tasks-empty" class="empty tasks-empty" hidden></p>
+  </section>
+</main>
+<template id="task-template">
+  <article class="task">
+    <h2>
+      <button type="button" class="task-toggle" aria-expanded="false">
+        <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        <span class="task-title"></span>
+        <span class="task-meta meta">
+          <span class="task-number"></span>
+          <span class="badge"></span>
+        </span>
+      </button>
+    </h2>
+    <div class="facts">
+      <div class="fact">
+        <svg class="icon" aria-hidden="true"><use href="#icon-progress"/></svg>
+        <span class="fact-key">当前进展</span>
+        <div>
+          <p class="progress-value"></p>
+          <p class="progress-meta meta"><svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg><span></span></p>
+        </div>
+      </div>
+      <div class="fact next">
+        <svg class="icon" aria-hidden="true"><use href="#icon-next"/></svg>
+        <span class="fact-key">下一步</span>
+        <p class="next-value"></p>
+      </div>
+    </div>
+    <section class="task-detail" aria-label="任务详情" hidden>
+      <div class="handoff">
+        <div class="handoff-header">
+          <span class="handoff-icon"><svg class="icon" aria-hidden="true"><use href="#icon-handoff"/></svg></span>
+          <h3>上次交接</h3>
+          <span class="handoff-meta meta"></span>
+          <button type="button" class="original-toggle text-button" aria-expanded="false">
+            <span>查看交接原文</span>
+            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+          </button>
+        </div>
+        <p class="handoff-summary"></p>
+        <div class="original" hidden>
+          <h4><svg class="icon" aria-hidden="true"><use href="#icon-file"/></svg>交接原文</h4>
+          <p class="original-state empty" role="status"></p>
+          <button type="button" class="original-retry text-button" hidden>重试</button>
+          <p class="original-text" hidden></p>
+          <section class="original-next" hidden>
+            <h4><svg class="icon" aria-hidden="true"><use href="#icon-handoff-next"/></svg>交接时的下一步</h4>
+            <p></p>
+          </section>
+        </div>
+      </div>
+      <p class="details-state empty" role="status" hidden></p>
+      <button type="button" class="details-retry text-button" hidden>重试读取任务详情</button>
+      <div class="task-sections" hidden>
+        <details class="task-section todos-section">
+          <summary class="section-toggle">
+            <svg class="icon" aria-hidden="true"><use href="#icon-list"/></svg>
+            <span class="section-heading">待办<span class="meta todo-count"></span></span>
+            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+          </summary>
+          <div class="section-content">
+            <p class="empty todos-empty">暂无未完成待办</p>
+            <ul class="todo-items open-todos" aria-label="未完成待办"></ul>
+            <details class="processed-section">
+              <summary class="processed-toggle">
+                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+                <span class="processed-count"></span>
+              </summary>
+              <ul class="todo-items processed-todos" aria-label="已处理待办"></ul>
+            </details>
+          </div>
+        </details>
+        <details class="task-section history-section">
+          <summary class="section-toggle">
+            <svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg>
+            <span class="section-heading">全部历史<span class="meta history-count"></span></span>
+            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+          </summary>
+          <div class="section-content">
+            <p class="empty history-empty">暂无历史记录</p>
+            <ol class="history-entries" aria-label="历史记录，时间倒序"></ol>
+          </div>
+        </details>
+      </div>
+    </section>
+  </article>
+</template>
+<template id="history-template">
+  <li>
+    <details class="history-entry">
+      <summary class="history-toggle">
+        <span class="history-icon" aria-hidden="true"></span>
+        <span>
+          <span class="history-caption"></span>
+          <span class="meta history-meta">
+            <span class="history-kind"></span>
+            <time></time>
+            <span class="history-source"></span>
+            <span class="history-superseded" hidden>已被替换</span>
+          </span>
+        </span>
+        <span class="history-action">
+          <span class="history-show">查看原文</span>
+          <span class="history-hide">收起原文</span>
+          <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        </span>
+      </summary>
+      <div class="original">
+        <p class="original-state empty" role="status"></p>
+        <button type="button" class="original-retry text-button" hidden>重试</button>
+        <p class="original-text" hidden></p>
+        <section class="original-next" hidden>
+          <h4>交接时的下一步</h4>
+          <p></p>
+        </section>
+      </div>
+    </details>
+  </li>
+</template>
+<template id="update-template">
+  <section class="update-component">
+    <h2 class="update-name"></h2>
+    <p class="empty update-pending" role="status"></p>
+    <div class="update-result" hidden>
+      <dl>
+        <dt>当前使用版本</dt><dd class="installed-version"></dd>
+        <dt>最新正式版</dt><dd class="latest-version"></dd>
+        <dt>更新状态</dt><dd class="update-status"></dd>
+      </dl>
+      <p class="empty update-error" role="status" hidden></p>
+      <a class="release-link" target="_blank" rel="noopener noreferrer" hidden>查看 GitHub Release</a>
+      <p class="empty release-address" role="status" hidden></p>
+      <button type="button" class="update-retry text-button" hidden>重试</button>
+    </div>
+  </section>
+</template>
+<script>
+  const panelStatus = document.getElementById("panel-status");
+  const projectName = document.getElementById("project-name");
+  const tasksView = document.getElementById("tasks-view");
+  const visibleCount = document.getElementById("visible-count");
+  const refresh = document.getElementById("refresh");
+  const retryProject = document.getElementById("retry-project");
+  const checkUpdates = document.getElementById("check-updates");
+  const updatesView = document.getElementById("updates-view");
+  const updateTemplate = document.getElementById("update-template");
+  const historyTemplate = document.getElementById("history-template");
+  const refreshStatus = document.getElementById("refresh-status");
+  const filters = document.getElementById("filters");
+  const tasks = document.getElementById("tasks");
+  const tasksEmpty = document.getElementById("tasks-empty");
+  const taskTemplate = document.getElementById("task-template");
+  const statuses = new Map([
+    ["all", ["全部", "all"]],
+    ["TODO", ["待开始", "todo"]],
+    ["IN_PROGRESS", ["进行中", "play"]],
+    ["BLOCKED", ["受阻", "blocked"]],
+    ["PAUSED", ["已暂停", "paused"]],
+    ["DONE", ["已完成", "done"]],
+    ["CANCELLED", ["已取消", "cancelled"]],
+  ]);
+  const historyKinds = {
+    PROGRESS: ["进展", "progress"],
+    HANDOFF: ["交接", "handoff"],
+    DECISION: ["决策", "file"],
+    STATUS: ["状态变更", "play"],
+  };
+  const todoStates = {
+    OPEN: ["待处理", "todo"],
+    RESOLVED: ["已完成", "done"],
+    CANCELLED: ["已取消", "cancelled"],
+    DISPOSED: ["已处理", "done"],
+    INACTIVE: ["已失效", "paused"],
+  };
+  const updateStatuses = {
+    update_available: "有可用更新",
+    up_to_date: "已是最新正式版",
+    ahead: "高于最新正式版",
+    unknown: "无法判断",
+  };
+  const timeFormat = new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  });
+
+  const host = window.parent;
+  const initializeId = 1;
+  let requestId = initializeId;
+  const pendingTools = new Map();
+  let selectedStatus = "all";
+  const post = (message) => host.postMessage({ jsonrpc: "2.0", ...message }, "*");
+  const timeout = window.setTimeout(() => {
+    showUnavailable("尚未收到 workLog 数据。请尝试重新打开面板。");
+  }, 8000);
+
+  function icon(name) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS(namespace, "use");
+    use.setAttribute("href", "#icon-" + name);
+    svg.append(use);
+    return svg;
+  }
+
+  function formatTime(value) {
+    let dateText = value || "";
+    if (dateText && Number.isFinite(Date.parse(dateText))) {
+      const parts = Object.fromEntries(
+        timeFormat.formatToParts(new Date(dateText)).map(({ type, value }) => [type, value])
+      );
+      const year = Number(parts.year) === new Date().getFullYear() ? "" : parts.year + " 年 ";
+      dateText = year + parts.month + " 月 " + parts.day + " 日 " + parts.hour + ":" + parts.minute;
+    }
+    return dateText;
+  }
+
+  function metadata(record) {
+    return record ? [formatTime(record.at), record.client].filter(Boolean).join(" · ") : "";
+  }
+
+  function showUnavailable(message) {
+    tasksView.hidden = true;
+    tasks.replaceChildren();
+    projectName.hidden = true;
+    panelStatus.textContent = message;
+    panelStatus.hidden = false;
+    retryProject.hidden = false;
+  }
+
+  function callHost(method, params, wait = 8000) {
+    const id = ++requestId;
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        pendingTools.delete(id);
+        resolve(null);
+      }, wait);
+      pendingTools.set(id, (result) => {
+        window.clearTimeout(timer);
+        resolve(result);
+      });
+      post({ id, method, params });
+    });
+  }
+
+  async function callTool(name, args, wait) {
+    const response = await callHost("tools/call", { name, arguments: args }, wait);
+    if (response?.result?.structuredContent) return response.result.structuredContent;
+    return { state: "unavailable", message: response ? "Codex 未能返回此项结果，请重试。" : "读取超时，请重试。" };
+  }
+
+  function originalLoader(original, request, emptyMessage) {
+    const status = original.querySelector(".original-state");
+    const text = original.querySelector(".original-text");
+    const next = original.querySelector(".original-next");
+    const retry = original.querySelector(".original-retry");
+    let loading = false;
+    let loaded = false;
+    async function load() {
+      if (loaded || loading) return;
+      loading = true;
+      status.hidden = false;
+      status.textContent = "正在读取原文…";
+      retry.hidden = true;
+      const result = await request();
+      loading = false;
+      if (result?.state !== "ready" || typeof result.body !== "string") {
+        status.textContent = result?.message || "无法读取原文。";
+        retry.hidden = false;
+        return;
+      }
+      loaded = true;
+      status.hidden = true;
+      text.textContent = result.body || emptyMessage;
+      text.hidden = false;
+      next.querySelector("p").textContent = result.nextStep || "";
+      next.hidden = !result.nextStep;
+    }
+    retry.addEventListener("click", () => { void load(); });
+    return load;
+  }
+
+  function renderTodo(item) {
+    const entry = document.createElement("li");
+    const content = document.createElement("span");
+    const state = document.createElement("span");
+    const [label, mark] = todoStates[item.status] || ["状态未知", "todo"];
+    state.className = "meta todo-status";
+    state.textContent = label;
+    content.append(state, item.summary);
+    if (item.outcome) {
+      const outcome = document.createElement("span");
+      outcome.className = "meta todo-outcome";
+      outcome.textContent = item.outcome;
+      content.append(outcome);
+    }
+    entry.append(icon(mark), content);
+    return entry;
+  }
+
+  function renderHistory(task, record) {
+    const entry = historyTemplate.content.firstElementChild.cloneNode(true);
+    const details = entry.querySelector("details");
+    const [label, mark] = historyKinds[record.kind];
+    entry.querySelector(".history-icon").append(icon(mark));
+    entry.querySelector(".history-caption").textContent = record.summary;
+    entry.querySelector(".history-kind").textContent = label;
+    const time = entry.querySelector("time");
+    time.dateTime = record.at;
+    time.textContent = formatTime(record.at);
+    let source = record.client || (record.source === "change" ? "workLog CLI" : "任务记录");
+    if (record.projectRecord) source = record.client ? record.client + " · 项目关联记录" : "项目关联记录";
+    entry.querySelector(".history-source").textContent = source;
+    entry.querySelector(".history-superseded").hidden = !record.superseded;
+    const load = originalLoader(entry.querySelector(".original"), () => callTool("read_worklog_history", {
+      taskId: task.id, source: record.source, recordId: record.id,
+    }), "这条历史记录没有原文。");
+    details.addEventListener("toggle", () => { if (details.open) void load(); });
+    return entry;
+  }
+
+  function renderItems(container, items, render) {
+    const fragment = document.createDocumentFragment();
+    for (const item of items) fragment.append(render(item));
+    container.replaceChildren(fragment);
+  }
+
+  function taskSectionsLoader(row, task) {
+    const state = row.querySelector(".details-state");
+    const retry = row.querySelector(".details-retry");
+    const sections = row.querySelector(".task-sections");
+    let loading = false;
+    let loaded = false;
+    async function load() {
+      if (loaded || loading) return;
+      loading = true;
+      state.hidden = false;
+      state.textContent = "正在读取待办和历史…";
+      retry.hidden = true;
+      const result = await callTool("read_worklog_task_sections", { taskId: task.id });
+      loading = false;
+      if (result?.state !== "ready" || !result.todos || !Array.isArray(result.history)) {
+        state.textContent = result?.message || "无法读取待办和历史。";
+        retry.hidden = false;
+        return;
+      }
+      const { open, processed } = result.todos;
+      row.querySelector(".todo-count").textContent = "未完成 " + open.length + " 项";
+      row.querySelector(".history-count").textContent = result.history.length + " 条";
+      row.querySelector(".processed-count").textContent = "已处理 · " + processed.length + " 项";
+      row.querySelector(".todos-empty").hidden = open.length > 0;
+      row.querySelector(".history-empty").hidden = result.history.length > 0;
+      row.querySelector(".processed-section").hidden = processed.length === 0;
+      renderItems(row.querySelector(".open-todos"), open, renderTodo);
+      renderItems(row.querySelector(".processed-todos"), processed, renderTodo);
+      renderItems(row.querySelector(".history-entries"), result.history, (record) => renderHistory(task, record));
+      loaded = true;
+      state.hidden = true;
+      sections.hidden = false;
+    }
+    retry.addEventListener("click", () => { void load(); });
+    return load;
+  }
+
+  function renderTask(task, index) {
+    const row = taskTemplate.content.firstElementChild.cloneNode(true);
+    const find = (selector) => row.querySelector(selector);
+    const toggle = find(".task-toggle");
+    const badge = find(".badge");
+    const [label, statusIcon] = statuses.get(task.status) || ["未知状态", "todo"];
+    row.dataset.status = task.status;
+    find(".task-title").textContent = task.title;
+    find(".task-number").textContent = task.number;
+    badge.append(icon(statusIcon), label);
+
+    const progressMeta = find(".progress-meta");
+    const progressMetadata = metadata(task.progress);
+    find(".progress-value").textContent = task.progress?.summary || "暂无进展记录";
+    progressMeta.querySelector("span").textContent = progressMetadata;
+    progressMeta.hidden = !progressMetadata;
+    find(".next-value").textContent = task.nextStep || "暂无下一步";
+
+    const detail = find(".task-detail");
+    const loadSections = taskSectionsLoader(row, task);
+    detail.id = "task-detail-" + index;
+    toggle.setAttribute("aria-controls", detail.id);
+    toggle.addEventListener("click", () => {
+      detail.hidden = !detail.hidden;
+      toggle.setAttribute("aria-expanded", String(!detail.hidden));
+      if (!detail.hidden) void loadSections();
+    });
+
+    const handoffEntry = task.handoff;
+    const originalToggle = find(".original-toggle");
+    const handoffMetadata = metadata(handoffEntry);
+    find(".handoff-meta").textContent = handoffMetadata;
+    find(".handoff-meta").hidden = !handoffMetadata;
+    find(".handoff-summary").textContent = handoffEntry
+      ? handoffEntry.summary || "暂无交接摘要"
+      : "暂无交接记录";
+    originalToggle.hidden = !handoffEntry;
+    if (!handoffEntry) return row;
+
+    const original = find(".original");
+    original.id = "original-" + index;
+    originalToggle.setAttribute("aria-controls", original.id);
+    const loadOriginal = originalLoader(original, () =>
+      callTool("read_worklog_codex_handoff", { taskId: task.id, entryId: handoffEntry.id }),
+      "这条交接没有记录原文。"
+    );
+    originalToggle.addEventListener("click", () => {
+      original.hidden = !original.hidden;
+      originalToggle.setAttribute("aria-expanded", String(!original.hidden));
+      originalToggle.querySelector("span").textContent = original.hidden ? "查看交接原文" : "收起交接原文";
+      if (!original.hidden) void loadOriginal();
+    });
+    return row;
+  }
+
+  function isReadyProject(result) {
+    return result?.state === "ready" && typeof result.projectName === "string" && Array.isArray(result.tasks);
+  }
+
+  function renderProject(project) {
+    projectName.textContent = project.projectName;
+    projectName.hidden = false;
+    const rows = document.createDocumentFragment();
+    project.tasks.forEach((task, index) => rows.append(renderTask(task, index)));
+    tasks.replaceChildren(rows);
+
+    const counts = new Map([["all", project.tasks.length]]);
+    for (const task of project.tasks) {
+      counts.set(task.status, (counts.get(task.status) || 0) + 1);
+    }
+    const maxCount = Math.max(1, ...Array.from(statuses.keys())
+      .filter((key) => key !== "all")
+      .map((key) => counts.get(key) || 0));
+
+    filters.replaceChildren();
+    function selectFilter(key) {
+      selectedStatus = key;
+      for (const filter of filters.children) {
+        filter.setAttribute("aria-pressed", String(filter.dataset.status === key));
+      }
+      for (const row of tasks.children) {
+        row.hidden = key !== "all" && row.dataset.status !== key;
+      }
+      const count = counts.get(key) || 0;
+      visibleCount.textContent = statuses.get(key)[0] + " · " + count + " 项任务";
+      tasksEmpty.hidden = count > 0;
+      tasksEmpty.textContent = key === "all" ? "此项目还没有任务。" : "该状态下暂无任务。";
+    }
+
+    for (const [key, [label, statusIcon]] of statuses) {
+      const button = document.createElement("button");
+      const track = document.createElement("span");
+      const bar = document.createElement("span");
+      const caption = document.createElement("span");
+      button.type = "button";
+      button.className = "filter";
+      button.dataset.status = key;
+      track.className = "filter-track";
+      track.setAttribute("aria-hidden", "true");
+      bar.className = "filter-bar";
+      const count = counts.get(key) || 0;
+      const barHeight = key === "all" ? 0 : Math.round(11 * count / maxCount);
+      bar.style.setProperty("--bar-height", barHeight + "px");
+      track.append(bar);
+      caption.className = "filter-label";
+      caption.append(icon(statusIcon), label + " " + count);
+      button.append(track, caption);
+      button.addEventListener("click", () => selectFilter(key));
+      filters.append(button);
+    }
+    selectFilter(selectedStatus);
+    panelStatus.hidden = true;
+    retryProject.hidden = true;
+    tasksView.hidden = false;
+  }
+
+  async function refreshProject() {
+    refresh.disabled = true;
+    retryProject.disabled = true;
+    const status = tasksView.hidden ? panelStatus : refreshStatus;
+    status.hidden = false;
+    status.textContent = "正在刷新任务…";
+    const result = await callTool("open_worklog_codex_panel", {});
+    refresh.disabled = false;
+    retryProject.disabled = false;
+    refreshStatus.hidden = true;
+    if (isReadyProject(result)) renderProject(result);
+    else showUnavailable(result?.message || "无法刷新任务，请重试。");
+  }
+
+  refresh.addEventListener("click", refreshProject);
+  retryProject.addEventListener("click", refreshProject);
+
+  function createUpdateRow(component, title) {
+    const row = updateTemplate.content.firstElementChild.cloneNode(true);
+    const find = (selector) => row.querySelector(selector);
+    const pending = find(".update-pending");
+    const resultView = find(".update-result");
+    const link = find(".release-link");
+    const address = find(".release-address");
+    const retry = find(".update-retry");
+    find(".update-name").textContent = title;
+    retry.setAttribute("aria-label", "重试检查 " + title);
+    let loading = false;
+    async function run() {
+      if (loading) return;
+      loading = true;
+      pending.hidden = false;
+      pending.textContent = "正在检查更新…";
+      resultView.hidden = true;
+      link.hidden = true;
+      address.hidden = true;
+      const result = await callTool("check_worklog_update", { component }, 25000);
+      loading = false;
+      pending.hidden = true;
+      resultView.hidden = false;
+      find(".installed-version").textContent = result?.installed_version
+        || (component === "cli" ? "当前使用版本无法确认" : "无法识别");
+      find(".latest-version").textContent = result?.latest_version || "暂无可确认的正式版";
+      find(".update-status").textContent = updateStatuses[result?.status] || "无法判断";
+      const error = result?.state === "ready" ? result.error : result?.message || "检查更新失败。";
+      find(".update-error").hidden = !error;
+      find(".update-error").textContent = error || "";
+      retry.hidden = !error;
+      const releaseUrl = result?.release_url;
+      if (typeof releaseUrl === "string" && /^https:\/\/github\.com\/LaudasMe\/worklog\/releases\/tag\/[A-Za-z0-9.-]+$/i.test(releaseUrl)) {
+        link.href = releaseUrl;
+        link.hidden = false;
+      }
+    }
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const response = await callHost("ui/open-link", { url: link.href });
+      if (!response?.result || response.result.isError) {
+        address.textContent = "Codex 无法直接打开此链接。可复制地址 " + link.href;
+        address.hidden = false;
+      }
+    });
+    retry.addEventListener("click", () => { void run(); });
+    return { row, run };
+  }
+
+  const updates = [
+    createUpdateRow("codex", "Codex GUI"),
+    createUpdateRow("cli", "CLI／Skill"),
+  ];
+  updatesView.append(...updates.map(({ row }) => row));
+  checkUpdates.addEventListener("click", async () => {
+    updatesView.hidden = false;
+    checkUpdates.disabled = true;
+    await Promise.all(updates.map(({ run }) => run()));
+    checkUpdates.disabled = false;
+  });
+
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (event.source !== host || message?.jsonrpc !== "2.0") return;
+
+    if (message.id === initializeId && !message.method) {
+      if (message.result) {
+        post({ method: "ui/notifications/initialized" });
+        checkUpdates.disabled = false;
+      } else if (message.error) {
+        window.clearTimeout(timeout);
+        showUnavailable("无法连接 Codex 面板。请尝试重新打开面板。");
+      }
+      return;
+    }
+
+    if (message.id !== undefined && ["ping", "ui/resource-teardown"].includes(message.method)) {
+      post({ id: message.id, result: {} });
+      return;
+    }
+
+    if (message.method === "ui/notifications/tool-result") {
+      window.clearTimeout(timeout);
+      const result = message.params?.structuredContent;
+      if (isReadyProject(result)) {
+        renderProject(result);
+      } else {
+        showUnavailable(result?.message || "无法读取 workLog 任务。请尝试重新打开面板。");
+      }
+      return;
+    }
+
+    if (!message.method && pendingTools.has(message.id)) {
+      const finish = pendingTools.get(message.id);
+      pendingTools.delete(message.id);
+      finish(message);
+    }
+  });
+
+  post({
+    id: initializeId,
+    method: "ui/initialize",
+    params: {
+      appInfo: { name: "worklog-codex-panel", version: "0.1.0" },
+      appCapabilities: {},
+      protocolVersion: "2026-01-26",
+    },
+  });
+</script>
+</html>

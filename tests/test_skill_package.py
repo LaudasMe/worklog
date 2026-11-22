@@ -28,7 +28,7 @@ class SkillPackageTest(unittest.TestCase):
     def test_package_reproducible_and_only_contains_tracked_runtime_sources(self):
         first = self.build(self.directory / "first")
         second = self.build(self.directory / "second")
-        self.assertEqual(first.name, "worklog-skill-v0.3.0.zip")
+        self.assertEqual(first.name, "worklog-skill-v0.4.0.zip")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         expected = {
             "worklog/SKILL.md": "skills/worklog/SKILL.md",
@@ -44,6 +44,8 @@ class SkillPackageTest(unittest.TestCase):
             "worklog/scripts/worklog_summaries.py": "worklog_summaries.py",
             "worklog/scripts/worklog_upgrade.py": "worklog_upgrade.py",
             "worklog/scripts/worklog_projects.py": "worklog_projects.py",
+            "worklog/scripts/worklog_release.py": "worklog_release.py",
+            "worklog/scripts/release-version.json": "release-version.json",
         }
         with ZipFile(first) as archive:
             self.assertIsNone(archive.testzip())
@@ -100,3 +102,48 @@ class SkillPackageTest(unittest.TestCase):
         self.assertNotEqual(status, 0)
         self.assertEqual(retired["error"]["code"], "invalid_input")
         self.assertEqual(call("snapshot")[1]["result"]["watermark"], 1)
+
+    def test_version_commands_only_read_the_installation(self):
+        installed = self.directory / "installed"
+        with ZipFile(self.build(self.directory / "dist")) as archive:
+            archive.extractall(installed)
+        cli = installed / "worklog/scripts/worklog.py"
+        environment = isolated_home(self.directory / "home")
+        environment["https_proxy"] = "http://127.0.0.1:1"
+        environment["no_proxy"] = ""
+        project = self.directory / "project"
+        project.mkdir()
+        subprocess.run(
+            [sys.executable, "-B", str(cli), "init"],
+            cwd=project, env=environment, input=b'{"name":"Synthetic project"}',
+            capture_output=True, check=True, timeout=10,
+        )
+        database = project / ".worklog/worklog.sqlite3"
+
+        def files_at(path):
+            return {file: file.read_bytes() for file in path.rglob("*") if file.is_file()}
+
+        def version_command(command, cwd):
+            return json.loads(subprocess.check_output(
+                [sys.executable, str(cli), command], cwd=cwd, env=environment, timeout=15,
+            ))
+
+        before_files, before_database = files_at(installed), database.read_bytes()
+        version = version_command("release-version", self.directory)
+        self.assertEqual(version["protocol_version"], "2.0")
+        self.assertEqual(version["result"]["release_version"], "v0.4.0")
+        self.assertEqual(version["result"]["cli_path"], str(cli.resolve()))
+        self.assertNotIn("project_id", version)
+        offline = version_command("check-update", project)["result"]
+        self.assertEqual(offline["installed_version"], "v0.4.0")
+        self.assertIsNone(offline["latest_version"])
+        self.assertEqual(offline["status"], "unknown")
+        self.assertTrue(offline["error"])
+        self.assertFalse((self.directory / ".worklog").exists())
+        self.assertEqual(files_at(installed), before_files)
+        self.assertEqual(database.read_bytes(), before_database)
+
+        cli.with_name("release-version.json").unlink()
+        unknown = version_command("release-version", self.directory)["result"]
+        self.assertIsNone(unknown["release_version"])
+        self.assertEqual(unknown["message"], "无法识别")

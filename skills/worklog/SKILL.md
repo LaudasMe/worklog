@@ -1,11 +1,27 @@
 ---
 name: worklog
-description: Use workLog to find project tasks, read records, change task state or priority, manage registered projects, or hand off to another client. Applies to workLog tasks such as T001 and requests to 查询摘要、读取上下文、开始任务、记录结果、标记完成、接手或交接 in workLog.
+description: Use workLog to find tasks, read records, change task state or priority, manage projects, hand off to another client, report the loaded CLI and Skill release version, or manually check for workLog updates. Applies to T001-style tasks and requests to 查询摘要、读取上下文、开始任务、记录结果、标记完成、接手、交接、查询 workLog 版本或检查更新.
 ---
 
 # workLog
 
 Use the installed workLog CLI for project identities, task state and work records. The skill directory is the directory containing the loaded `SKILL.md`. Use its absolute path, or the skill base directory supplied by the client.
+
+## Show the release version or check for an update
+
+For 「当前用的是哪个 workLog 版本」, use `release-version`. For 「检查 workLog 是否有更新」, use `check-update`. These requests can run from any directory without selecting a project.
+
+Use the absolute directory of the `SKILL.md` loaded for this chat. In Codex, use the path attached to the loaded Skill or the Skill document you read. In OpenCode, use the base directory returned when the built-in `skill` tool loads `worklog`.
+
+The first time you use workLog in a chat, run `release-version` by itself with the loaded Skill's CLI. If the user is asking for the release version, use that result for the reply. Continue the requested work once the command returns.
+
+- In Codex, run `env WORKLOG_CODEX_SKILL=1 python3 -B "<skill directory>/scripts/worklog.py" release-version`. Use this form for the first confirmation and later version queries, so the Codex sidebar can recognize this Skill invocation in the current chat.
+- In OpenCode, run `python3 -B "<skill directory>/scripts/worklog.py" release-version`.
+- For a manual update check in either host, run `python3 -B "<skill directory>/scripts/worklog.py" check-update` as a separate command.
+
+- For a version query, report `result.release_version` and `protocol_version` separately. If the release version is missing or the loaded CLI lacks the release command, report 「无法识别」. The `--version` flag reports the CLI protocol.
+- For update checks, report the installed release, latest formal release, comparison status and any Release link returned by the command. Include the reason when the result contains an error and retry only on request. A missing or unidentifiable local version uses 「无法判断」 for comparison.
+- These commands only read information. The user can follow the Release link to download and install manually.
 
 ## Confirm the project before calling the CLI
 

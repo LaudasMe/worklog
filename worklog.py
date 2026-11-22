@@ -4,8 +4,13 @@
 import argparse
 from contextlib import closing
 import json
+from pathlib import Path
 import sqlite3
 import sys
+
+# Direct invocations of the installed CLI must not create Python cache files.
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
 
 from worklog_context import context, record, record_get
 
@@ -14,6 +19,7 @@ from worklog_store import (
     connect, initialize, json_text, metadata, project_db, read_request, write_request,
 )
 from worklog_projects import list_projects, move_project, register_new_project, register_project, remove_project
+from worklog_release import VERSION_MANIFEST, check_update, read_release_version
 from worklog_upgrade import backup, upgrade
 from worklog_summaries import summaries
 
@@ -46,6 +52,8 @@ def arguments(argv):
     commands = parser.add_subparsers(dest="command", required=True)
     for command in ("init", *WRITES, "identity", "snapshot"):
         commands.add_parser(command)
+    commands.add_parser("release-version", help="read the installed CLI and Skill release version")
+    commands.add_parser("check-update", help="check GitHub Releases for a CLI and Skill update")
     backup_command = commands.add_parser("backup")
     backup_command.add_argument("--output", required=True)
     backup_command.add_argument("--project-id", help="verify the selected project's identity")
@@ -108,6 +116,26 @@ def request_json():
 
 def execute(args):
     command = args.command
+    if command in {"release-version", "check-update"}:
+        cli_path = Path(__file__).resolve()
+        installed_version = read_release_version(cli_path.with_name(VERSION_MANIFEST))
+        if command == "release-version":
+            return None, {
+                "command": command,
+                "release_version": installed_version,
+                "cli_path": str(cli_path),
+                "status": "recognized" if installed_version else "unknown",
+                "message": None if installed_version else "无法识别",
+            }
+        result = check_update("cli", installed_version)
+        result["installed_version_label"] = installed_version or "无法识别"
+        result["status_label"] = {
+            "update_available": "有更新",
+            "up_to_date": "已是最新版本",
+            "ahead": "本机版本较新",
+            "unknown": "无法判断",
+        }[result["status"]]
+        return None, result
     if command == "projects":
         if args.projects_command == "list":
             return None, list_projects()

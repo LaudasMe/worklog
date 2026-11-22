@@ -4,6 +4,8 @@ Use Python 3.9 or newer and the absolute path to the bundled `scripts/worklog.py
 
 | Intent | Command | Input and result |
 | --- | --- | --- |
+| Read the installed release | `release-version` | Returns `result.release_version` and the running CLI path, with the CLI protocol in `protocol_version`. A missing or invalid manifest yields a null release version and 「无法识别」. |
+| Check for an update | `check-update` | Requests official GitHub Releases and returns installed and latest CLI／Skill releases, a comparison status, the Release link when available, and the reason for a failed lookup. |
 | Identify project | `identity` | Returns `result.name` and supported read capabilities. Project data responses contain `project_id`, `data_generation` and `protocol_version`. |
 | Read task | `task-get T001` | Accepts a display number or UUID. Includes base and display states, archive flag, nullable priority, active run and record references. Includes completion details for a `DONE` task. |
 | Discover tasks | `summaries --type task --status IN_PROGRESS` | Default: unarchived tasks. Select `--view pending` or `--view archived`; combine `--status`, `--display-status`, `--blocked`, `--priority p0…p3` and `--task`. Includes base and display states plus nullable priority. |
@@ -26,6 +28,8 @@ Use Python 3.9 or newer and the absolute path to the bundled `scripts/worklog.py
 | Claim | `claim` | Reads common write fields, `task_id`, `expected_revision`, `client` and `session_id`. When the user confirms replacing an active run, also pass `replaces_run_id` from the latest task. |
 | Save progress | `checkpoint` | Reads common write fields, `task_id`, `expected_revision`, `run_id`, `summary`, `body_md` and `next_step`. |
 | Hand off | `handoff` | Reads the same fields as `checkpoint`. Returns a new handoff entry and clears the active run. |
+
+`release-version` and `check-update` can run without a project. Both are read-only. The release version comes from `release-version.json` next to the CLI script. The `--version` flag returns the protocol version as plain text. The update check matches stable `vX.Y.Z` tags for the CLI／Skill and excludes drafts and prereleases. Its comparison codes are `update_available`, `up_to_date`, `ahead` and `unknown`. On remote failure, the comparison is `unknown` and the local release is still included when known.
 
 Common write fields are `operation_id`, `project_id` and `data_generation`. Use a newly generated UUID for each new operation. For the original task and handoff writes, `result.seq` and `result.change_id` identify the receipt, `result.task.revision` is the new task revision, and `result.task.active_run.run_id` identifies the run when it is still open.
 
