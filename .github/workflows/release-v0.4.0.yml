@@ -1,0 +1,105 @@
+name: Publish workLog v0.4.0 and Codex GUI v0.1.0
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-v0.4.0.yml]
+  workflow_dispatch:
+
+concurrency: worklog-release-v0.4.0
+
+jobs:
+  publish:
+    if: github.repository == 'LaudasMe/worklog' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      RELEASE_COMMIT: 585b9620f2c867c52d59efce5a21feafc14e7790
+    steps:
+      - name: Check out verified release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check both release tags
+        shell: bash
+        run: |
+          test "$(git rev-parse 'v0.4.0^{commit}')" = "$RELEASE_COMMIT"
+          test "$(git rev-parse 'gui-codex-v0.1.0^{commit}')" = "$RELEASE_COMMIT"
+      - name: Test the release
+        run: |
+          python3 -B -m unittest discover -s tests -q
+          python3 -B gui/codex/test_project_panel.py
+          python3 -B gui/codex/test_codex_skill_version.py
+      - name: Rebuild the accepted assets
+        shell: bash
+        run: |
+          python3 -B scripts/package_skill.py --output-dir "$RUNNER_TEMP/skill"
+          /usr/bin/python3 -B gui/codex/build_local.py --release-assets --output-dir "$RUNNER_TEMP/gui"
+          (
+            cd "$RUNNER_TEMP/skill"
+            printf '%s\n' '06b1b87d9329d162402fcd69ae0f61d382d751e033493471b8040c818020873e  worklog-skill-v0.4.0.zip' > SHA256SUMS
+            shasum -a 256 -c SHA256SUMS
+          )
+          (
+            cd "$RUNNER_TEMP/gui"
+            shasum -a 256 -c SHA256SUMS
+            printf '%s\n' \
+              '1a7a8f6ddfdeb222ac512d58d30c06c069981352a557d32bcad43b2d183c78e4  worklog-codex-gui-v0.1.0-full.zip' \
+              '3bc474a88efbd142b2b2c42b3c716a9d647fa38a0dd445eb58deeb7e1d758a20  install-codex.sh' | shasum -a 256 -c
+          )
+      - name: Prepare and publish both releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/skill-notes.md" <<'NOTES'
+          CLI 和 Skill 共用发布版本 `v0.4.0`。Codex 和 OpenCode 均可在聊天中查询实际使用的 workLog 版本，并手动检查正式更新。
+
+          - `release-version` 显示当前 CLI／Skill 发布版本，`check-update` 查询最新正式版和下载链接。两条命令均可在没有项目数据库的目录运行。
+          - `--version` 继续显示 CLI 协议 `2.0`。公开只读接口使用 schema 4。
+          - 下载 `worklog-skill-v0.4.0.zip` 和 `SHA256SUMS`，运行 `shasum -a 256 -c SHA256SUMS` 后按说明安装或替换整套 Skill。
+
+          [CLI／Skill 安装说明](https://github.com/LaudasMe/worklog/blob/v0.4.0/docs/skill.md) · [Codex GUI 完整安装包](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0)
+          NOTES
+          cat > "$RUNNER_TEMP/gui-notes.md" <<'NOTES'
+          Codex 桌面会话的只读项目侧栏首版。它按当前聊天目录读取任务、进展、下一步、上次交接、待办和全部历史，并分别检查侧栏和当前聊天所用 CLI／Skill 的更新。
+
+          完整包随附 workLog CLI／Skill `v0.4.0`。需要 macOS、Codex 桌面端和 Python 3.9 或更新版本。
+
+          - 终端安装可运行本页的 `install-codex.sh`。脚本下载该版本完整 ZIP，校验 SHA-256 后执行随包安装器。
+          - 手动安装可下载 ZIP 和 `SHA256SUMS`，校验后解压运行 `python3 -B install.py`。整套替换现有 CLI／Skill 前会提示用户确认。
+          - 重新打开 Codex，从项目的本地聊天右侧选择「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。
+
+          [安装和打开侧栏](https://github.com/LaudasMe/worklog/blob/gui-codex-v0.1.0/gui/codex/INSTALL.md) · [CLI／Skill v0.4.0](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0)
+          NOTES
+
+          prepare_release() {
+            local tag="$1" asset_dir="$2" title="$3" notes="$4" asset names verified
+            if ! gh release view "$tag" --json isDraft >/dev/null 2>&1; then
+              gh release create "$tag" --verify-tag --draft --title "$title" --notes-file "$notes"
+            fi
+            if [[ "$(gh release view "$tag" --json isDraft --jq '.isDraft')" == true ]]; then
+              names="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+              for asset in "$asset_dir"/*; do
+                if ! grep -Fxq "${asset##*/}" <<< "$names"; then
+                  gh release upload "$tag" "$asset"
+                fi
+              done
+            fi
+            verified="$(mktemp -d "$RUNNER_TEMP/verify.XXXXXXXX")"
+            gh release download "$tag" --pattern '*' --dir "$verified"
+            diff -r "$asset_dir" "$verified"
+          }
+
+          prepare_release v0.4.0 "$RUNNER_TEMP/skill" 'workLog v0.4.0' "$RUNNER_TEMP/skill-notes.md"
+          prepare_release gui-codex-v0.1.0 "$RUNNER_TEMP/gui" 'workLog Codex GUI v0.1.0' "$RUNNER_TEMP/gui-notes.md"
+          if [[ "$(gh release view v0.4.0 --json isDraft --jq '.isDraft')" == true ]]; then
+            gh release edit v0.4.0 --draft=false --latest --verify-tag
+          fi
+          if [[ "$(gh release view gui-codex-v0.1.0 --json isDraft --jq '.isDraft')" == true ]]; then
+            gh release edit gui-codex-v0.1.0 --draft=false --latest=false --verify-tag
+          fi
