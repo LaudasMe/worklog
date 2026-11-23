@@ -2,35 +2,46 @@
 
 workLog 把散落在聊天里的推进事项整理成可追踪的任务、待办和进展记录。你和 Agent 照常讨论工作。需要记录时，一句话就能让 Agent 从当前聊天自动提取已确认的事项并写入项目。后续有新进展，也可以直接让 Agent 更新记录，省下逐条建任务、手动记进度和反复交代背景的时间。
 
-## 两种使用方式
+## 安装
 
 ### CLI 版（通用 Skill）
 
-在聊天中加载 `worklog` Skill，用自然语言让 Agent 查询任务、整理待办或记录进展。Agent 会调用 CLI 读写项目数据。通用 Skill 可在 Codex 或 OpenCode 中单独安装。 [CLI／Skill 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0) · [Skill 安装说明](docs/skill.md)
+安装并在聊天中加载 `worklog` Skill。你用自然语言发指令，Agent 调用 CLI 执行。 [CLI／Skill 下载](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [Skill 安装说明](docs/skill.md)
 
 ### GUI 版（Codex 桌面端）
 
-GUI 版包含同一套 CLI 和 Skill，并在 macOS 的 Codex 桌面端提供可视化任务面板。你可以在聊天旁查看任务列表、当前进展、待办、下一步和历史记录。面板用于查看，更新任务仍可在聊天中交给 `worklog` Skill。
-
-## 一行安装 Codex 侧栏
-
-在装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，打开终端运行下面的命令。
+GUI 版随包提供 CLI 和 Skill，并在 Codex 聊天旁增加只读任务面板。在装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，运行下面的一行命令。安装后重启 Codex。
 
 ```bash
-(worklog_installer="$(curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
-脚本会下载并校验安装包，安装 Codex 侧栏，随包提供 workLog CLI 和 Skill。安装完成后重启 Codex。 [Codex 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0)
+[Codex GUI 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装](gui/codex/INSTALL.md)
 
-## 快速上手
+## 三个使用场景
 
-从要管理的项目根目录开启聊天，加载 `worklog` Skill。
+先从项目根目录开启聊天，加载 `worklog` Skill。如果项目是第一次使用 workLog，先说「为当前项目初始化 workLog，项目名用『示例项目』。」
 
-1. **首次启用**。说「为当前项目初始化 workLog，项目名称用『示例项目』。」已经启用的项目可以直接开始整理。
-2. **从讨论中提取任务**。在聊天里确定了要做的事，就说「用 workLog 把这次聊天里已确定要推进的事项建成任务和待办，记下已经完成的工作和下一步。需要确认的事项先列出来。」
-3. **跟踪后续进展**。有新结果时，说「用 workLog 根据刚才的进展更新对应任务，标记已完成的待办，记下结果和下一步。」
+### 1. 新建任务
 
-使用 GUI 版时，在 Codex 本地聊天右侧点「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」查看任务。升级早期版本时，旧项目需要先备份并升级到 schema 4 才能在侧栏查看。 [打开侧栏](gui/codex/INSTALL.md#打开侧栏) · [备份和升级](docs/context-cli.md#备份和升级)
+- **CLI 版**。讨论清楚后，在聊天中说「用 workLog 把刚才确认的订单金额核对建成任务，把核对普通订单和核对零金额订单分别列为待办。」
+- **GUI 版**。在 Codex 聊天中发送同样的指令。打开项目侧栏（入口见下方），点「刷新」即可看到新任务。
+
+### 2. 更新任务
+
+- **CLI 版**。有新结果时，说「用 workLog 更新 T001。普通订单合计 5 元，把核对普通订单这条待办标为完成，下一步核对零金额订单。」用 workLog 返回的任务编号替换 `T001`。
+- **GUI 版**。在 Codex 聊天中发送同样的更新指令。保存后点侧栏的「刷新」，检查进展、待办和下一步。
+
+### 3. 查看任务
+
+- **CLI 版**。在聊天中说「用 workLog 查看 T001 的进展、未完成的待办和下一步。」还不知道任务编号时，可以先问「当前项目有哪些任务还没结束？」
+- **GUI 版**。在本地聊天右侧点「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。可以按状态筛选任务，点开任务查看待办和历史记录。 [打开侧栏](gui/codex/INSTALL.md#打开侧栏)
+
+<img src="docs/images/codex-task-panel.png" alt="Codex 侧栏显示核对订单金额任务的进展、待办和历史" width="452">
+
+*Codex 任务侧栏预览，使用示例数据。*
+
+早期版本的项目需要先备份并升级到 schema 4，才能在侧栏查看。 [备份和升级](docs/context-cli.md#备份和升级)
 
 ## 项目特色
 
