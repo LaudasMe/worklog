@@ -1,41 +1,36 @@
 # workLog
 
-workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做一个项目。会话可以从项目目录找到任务，读回目标、决定、进展和待办，完成工作后把结果记下来。
+workLog 帮你在 Codex 和 OpenCode 之间接着做同一个项目。把任务、待办、进展和下一步记在项目里。换一个聊天或客户端时，打开同一个项目就能接着做。
 
-你可以按状态和优先级查任务，记录 Markdown 原文和完成依据，也可以暂停、取消、归档、重开或把任务交给下一个会话。每个项目各有一个数据库，放在自己的 `.worklog/` 目录里。
+## 一行安装 Codex 侧栏
 
-**[阅读 workLog 用户指南](docs/user-guide.md)**，了解如何安装、管理任务，以及在 Codex 和 OpenCode 之间接力。
-
-## 第一次使用
-
-1. 准备 Python 3.9 或以上。从 [v0.4.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0) 下载 Skill ZIP，也可以在 v0.4.0 源码目录运行 `python3 -B scripts/package_skill.py` 构建。
-2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。已有 schema 1、2、3 的项目可先用本地上下文核对，再按[备份与升级步骤](docs/context-cli.md#备份和升级)升到 schema 4。
-3. 从项目根目录开一个新会话，加载 `worklog` Skill 后说「找出当前项目还在处理的任务，读一下上下文，告诉我下一步」。
-
-上一版可从 [v0.3.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.3.0)获取。
-
-## 安装 Codex 侧栏
-
-在装有 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，打开终端并运行以下命令。
+在装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，打开终端运行下面的命令。
 
 ```bash
 (worklog_installer="$(curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
-脚本下载并校验 Codex 完整包。完整包随附 CLI／Skill v0.4.0，替换现有安装前会提示用户确认。安装后重启 Codex，在项目的本地聊天右侧打开「workLog 项目侧栏」。也可从 [GUI 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0)下载完整 ZIP，再按[手动安装说明](gui/codex/INSTALL.md)安装。
+脚本会下载并校验安装包，安装 Codex 侧栏，随包提供 workLog CLI 和 Skill。安装完成后重启 Codex。 [Codex 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0)
 
-## 从命令行使用
+使用 OpenCode，或只需要在聊天中管理任务，可以单独安装 Skill。 [CLI／Skill 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0) · [Skill 安装说明](docs/skill.md)
 
-[上下文 CLI](docs/context-cli.md)介绍任务摘要、项目与任务上下文、批量写回和旧库升级。[CLI 说明](docs/cli.md)介绍任务和交接流程。公开[只读接口](docs/read-protocol.md)仅支持协议 2.0，可读取快照、增量和历史原文。
+## 快速上手
 
-用 `release-version` 查询实际使用的 CLI／Skill 发布版本，用 `check-update` 手动检查正式更新。`--version` 显示 CLI 协议版本。具体用法见 [Skill 说明](docs/skill.md)。
+从要管理的项目根目录开启聊天并加载 `worklog` Skill。在 Codex 中用 Skill 选择器，在 OpenCode 中请 Agent 用内置 `skill` 工具加载。你可以在聊天里试试下面的指令。
 
-## 运行测试
+1. **建任务**。说「为当前项目初始化 workLog，创建任务『核对订单金额』。」已有 workLog 的项目可以直接说「列出当前项目还没结束的任务」。
+2. **记进展**。说「开始 T001。已核对普通订单，下一步核对零金额订单。请保存这条进展。」把示例中的 `T001` 换成 workLog 返回的任务编号。
+3. **继续工作**。从同一项目目录开启新会话，加载 Skill 后说「读一下 T001 的进展、待办和下一步，然后继续核对。」
 
-```sh
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
-```
+在 Codex 本地聊天右侧，点「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」查看任务。升级早期版本时，旧项目需要先备份并升级到 schema 4 才能在侧栏查看。 [打开侧栏](gui/codex/INSTALL.md#打开侧栏) · [备份和升级](docs/context-cli.md#备份和升级)
 
-请在保留 `v0.1.0`、`v0.2.0` 标签及提交历史的完整 Git 克隆中运行测试。测试用历史源码生成临时数据库，检查备份、升级、回滚和恢复，以及任务生命周期、优先级、项目登记、公开只读协议、跨目录接力和 ZIP 安装。
+## 项目特色
 
-许可证见 [LICENSE](LICENSE)。
+- **跨会话交接**。在 Codex 记下做了什么、还要做什么，再从 OpenCode 或新的 Codex 聊天读回交接原文并接手。
+- **任务有完整记录**。可管理状态、优先级和待办，保留进展、决定、交接及完成依据，日后可按任务编号查回。
+- **在聊天旁查看项目**。Codex 侧栏可查看当前进展、下一步、待办、上次交接和全部历史。通过聊天中的 Skill 更新任务。
+- **数据保存在项目本地**。每个项目有独立的 SQLite 数据库，位于项目根目录的 `.worklog/`。CLI 可单独使用，也提供供其他工具读取的只读接口。
+
+## 文档
+
+[用户指南](docs/user-guide.md) · [CLI 命令](docs/cli.md) · [只读协议 2.0](docs/read-protocol.md) · [Apache 2.0 许可证](LICENSE)
