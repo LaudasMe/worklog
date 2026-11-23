@@ -4,25 +4,29 @@ workLog 把散落在聊天里的推进事项整理成可追踪的任务、待办
 
 ## 安装
 
+选择一个版本，把对应的安装指令复制到能在本机执行命令的 Agent 客户端。
+
 ### CLI 版（通用 Skill）
 
-在装有 Python 3.9 或更新版本的 macOS 或 Linux 上，打开终端运行下面的一行命令。
+适用于装有 Python 3.9 或更新版本的 macOS 和 Linux。
 
-```bash
-(worklog_installer="$(curl -fsSL https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh)" && /bin/bash -c "$worklog_installer")
+```text
+请在这台电脑上安装 workLog CLI 和通用 Skill。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果和安装位置。
+https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill，再用自然语言让 Agent 调用 CLI。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [手动安装与升级](docs/skill.md)
+脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [手动安装与升级](docs/skill.md)
 
 ### GUI 版（Codex 桌面端）
 
-GUI 版随包提供 CLI 和 Skill，并在 Codex 聊天旁增加只读任务面板。在装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，运行下面的一行命令。安装后重启 Codex。
+适用于装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac。GUI 版随包提供 CLI 和 Skill，并在 Codex 聊天旁增加只读任务面板。
 
-```bash
-(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
+```text
+请在这台 Mac 上安装 workLog 的 Codex GUI 版。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果。
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh
 ```
 
-[Codex GUI 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装](gui/codex/INSTALL.md)
+安装完成后重启 Codex。 [Codex GUI 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装](gui/codex/INSTALL.md)
 
 ## 三个使用场景
 
