@@ -6,7 +6,13 @@ workLog 把散落在聊天里的推进事项整理成可追踪的任务、待办
 
 ### CLI 版（通用 Skill）
 
-安装并在聊天中加载 `worklog` Skill。你用自然语言发指令，Agent 调用 CLI 执行。 [CLI／Skill 下载](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [Skill 安装说明](docs/skill.md)
+在装有 Python 3.9 或更新版本的 macOS 或 Linux 上，打开终端运行下面的一行命令。
+
+```bash
+(worklog_installer="$(curl -fsSL https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh)" && /bin/bash -c "$worklog_installer")
+```
+
+脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill，再用自然语言让 Agent 调用 CLI。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [手动安装与升级](docs/skill.md)
 
 ### GUI 版（Codex 桌面端）
 
