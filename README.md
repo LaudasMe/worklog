@@ -4,13 +4,15 @@ workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做
 
 你可以按状态和优先级查任务，记录 Markdown 原文和完成依据，也可以暂停、取消、归档、重开或把任务交给下一个会话。每个项目各有一个数据库，放在自己的 `.worklog/` 目录里。
 
+**[阅读 workLog 用户指南](docs/user-guide.md)**，了解如何安装、管理任务，以及在 Codex 和 OpenCode 之间接力。
+
 ## 第一次使用
 
 1. 准备 Python 3.9 或以上。从 [v0.4.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0) 下载 Skill ZIP，也可以在 v0.4.0 源码目录运行 `python3 -B scripts/package_skill.py` 构建。
 2. 按[安装说明](docs/skill.md)把 ZIP 解压到客户端能找到的位置。已有 schema 1、2、3 的项目可先用本地上下文核对，再按[备份与升级步骤](docs/context-cli.md#备份和升级)升到 schema 4。
 3. 从项目根目录开一个新会话，加载 `worklog` Skill 后说「找出当前项目还在处理的任务，读一下上下文，告诉我下一步」。
 
-[用户指南](docs/user-guide.md)包含新会话读取、写回和复查，以及从创建 T001 到跨客户端接手的完整示例。上一版可从 [v0.3.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.3.0)获取。
+上一版可从 [v0.3.0 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.3.0)获取。
 
 ## 安装 Codex 侧栏
 
