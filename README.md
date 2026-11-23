@@ -19,7 +19,7 @@ workLog 帮你在 Codex、OpenCode 或同一个客户端的新会话里接着做
 在装有 Codex 桌面端和 Python 3.9 或更新版本的 Mac 上，打开终端并运行以下命令。
 
 ```bash
-(worklog_installer="$(mktemp)" && trap 'rm -f -- "$worklog_installer"' EXIT && curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh -o "$worklog_installer" && /bin/bash "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
 脚本下载并校验 Codex 完整包。完整包随附 CLI／Skill v0.4.0，替换现有安装前会提示用户确认。安装后重启 Codex，在项目的本地聊天右侧打开「workLog 项目侧栏」。也可从 [GUI 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0)下载完整 ZIP，再按[手动安装说明](gui/codex/INSTALL.md)安装。

@@ -122,15 +122,19 @@ import sys
 base = "https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/"
 url = next(arg for arg in sys.argv[1:] if arg.startswith("https://"))
 assert url.startswith(base), url
+asset_name = url[len(base):]
 asset = {
     "install-codex.sh": os.environ["WORKLOG_TEST_LAUNCHER"],
     "worklog-codex-gui-v0.1.0-full.zip": os.environ["WORKLOG_TEST_ARCHIVE"],
-}[url[len(base):]]
-flag = "--output" if "--output" in sys.argv else "-o"
-target = Path(sys.argv[sys.argv.index(flag) + 1])
-target.write_bytes(Path(asset).read_bytes())
+}[asset_name]
+if asset_name == "install-codex.sh":
+    assert "-o" not in sys.argv and "--output" not in sys.argv
+    sys.stdout.buffer.write(Path(asset).read_bytes())
+else:
+    target = Path(sys.argv[sys.argv.index("--output") + 1])
+    target.write_bytes(Path(asset).read_bytes())
 with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as log:
-    print(target, file=log)
+    print(asset_name, file=log)
 """,
             encoding="utf-8",
         )
@@ -152,10 +156,8 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
             env=env, capture_output=True, text=True, timeout=45,
         )
         downloaded = download_log.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(downloaded), 2, result.stderr or result.stdout)
-        shell_script, zip_file = map(Path, downloaded)
-        self.assertFalse(shell_script.exists())
-        self.assertFalse(zip_file.parent.exists())
+        self.assertEqual(downloaded, [self.launcher.name, self.package.name], result.stderr or result.stdout)
+        self.assertEqual(list(temporary_downloads.glob("worklog-codex-install.*")), [])
         return result
 
     def test_readme_command_installs_release_in_a_clean_profile(self):

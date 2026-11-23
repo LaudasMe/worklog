@@ -11,7 +11,7 @@ workLog 在项目里保存任务、待办、进展和交接记录。你可以在
 准备支持本地插件的 Codex 桌面端和 Python 3.9 或以上版本。打开终端，执行下面的命令安装侧栏及随包的 CLI 和 Skill。
 
 ```sh
-(worklog_installer="$(mktemp)" && trap 'rm -f -- "$worklog_installer"' EXIT && curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh -o "$worklog_installer" && /bin/bash "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
 脚本会下载并校验完整安装包。安装器提示是否替换旧版 Skill 或无法识别的 Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装和自定义 Codex 路径](../gui/codex/INSTALL.md)
