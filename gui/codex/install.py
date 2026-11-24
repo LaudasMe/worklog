@@ -206,27 +206,52 @@ def install_plugin(payload, archive_id, version, codex_home, codex):
     if market["name"] != MARKET or market["plugins"][0]["name"] != PLUGIN:
         raise InstallError("完整包的 Codex 插件标识无效。")
     market["plugins"][0]["source"]["path"] = f"./{plugin_root.relative_to(root).as_posix()}"
-    write_atomic(manifest, (json.dumps(market, ensure_ascii=False, indent=2) + "\n").encode())
     environment = {**os.environ, "CODEX_HOME": str(codex_home)}
     command = [codex, "plugin"]
+    plugin_target = f"{PLUGIN}@{MARKET}"
+
+    def plugin_is_installed():
+        entries = json.loads(checked_run([*command, "list", "--json"], root, environment))["installed"]
+        return any(item["pluginId"] == plugin_target for item in entries)
+
+    previous_installed = None
+    if earlier is not None:
+        try:
+            previous_installed = plugin_is_installed()
+        except (InstallError, OSError, KeyError, ValueError):
+            # A different marketplace may be invalid. Leave the normal install path available.
+            pass
+
+    write_atomic(manifest, (json.dumps(market, ensure_ascii=False, indent=2) + "\n").encode())
     added_market = False
+    plugin_updated = False
     step = "登记本地插件"
     try:
         checked_run([*command, "marketplace", "add", str(root)], root, environment)
         added_market = earlier is None
         step = "启用 Codex 侧栏"
-        report = json.loads(checked_run([*command, "add", f"{PLUGIN}@{MARKET}", "--json"], root, environment))
+        report_text = checked_run([*command, "add", plugin_target, "--json"], root, environment)
+        plugin_updated = True
+        report = json.loads(report_text)
         if "gui-codex-v" + report["version"] != version:
             raise InstallError("Codex 返回的插件版本与完整包不一致。")
     except (Exception, KeyboardInterrupt) as error:
         try:
             if earlier is not None:
                 write_atomic(manifest, earlier)
+                checked_run([*command, "marketplace", "add", str(root)], root, environment)
+                if previous_installed is False:
+                    if plugin_is_installed():
+                        checked_run([*command, "remove", plugin_target], root, environment)
+                else:
+                    checked_run([*command, "add", plugin_target, "--json"], root, environment)
             else:
+                if plugin_updated:
+                    checked_run([*command, "remove", plugin_target], root, environment)
                 if added_market:
                     checked_run([*command, "marketplace", "remove", MARKET], root, environment)
                 manifest.unlink(missing_ok=True)
-        except (InstallError, OSError) as recovery_error:
+        except (InstallError, OSError, KeyError, ValueError) as recovery_error:
             raise InstallError(
                 f"Codex 侧栏安装失败（{step}）。{error}。恢复插件登记失败。{recovery_error}"
             ) from error

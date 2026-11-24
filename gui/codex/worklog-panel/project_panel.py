@@ -1,7 +1,9 @@
-"""只读取当前 Codex 聊天对应的 workLog 项目。"""
+"""读取当前聊天或本机登记中的 schema 4 workLog 项目。"""
 
+from collections import Counter
 from contextlib import closing, contextmanager
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -12,40 +14,46 @@ from worklog_projects import read_registry, registry_path
 from worklog_store import (
     SCHEMA_VERSION, TERMINAL_TASK_STATES, WorklogError, connect,
     effective_todos, entry_refs, latest_entry, metadata, project_db, require_project_id,
-    schema_version, task_row,
+    run_history, schema_version, task_row,
 )
 from worklog_summaries import project_tasks
 
 
 class PanelError(Exception):
-    pass
+    def __init__(self, message, code="unavailable"):
+        super().__init__(message)
+        self.code = code
 
 
 class UnsupportedSchema(PanelError):
     def __init__(self, version):
         self.version = version
-        super().__init__(f"当前项目的数据库 schema 为 {version}。侧栏支持的版本为 {SCHEMA_VERSION}。")
+        super().__init__(
+            f"项目数据库 schema 为 {version}，当前支持 schema {SCHEMA_VERSION}。请核对数据库版本。",
+            "unsupported_schema",
+        )
 
 
 def locate_project(cwd):
-    registered = {Path(path).resolve(): row["project_id"] for path, row in read_registry(registry_path()).items()}
+    registered = read_registry(registry_path())
     cwd = cwd.resolve()
     for root in (cwd, *cwd.parents):
-        if root in registered:
-            return root, registered[root]
+        if str(root) in registered:
+            return root, registered[str(root)]["project_id"]
         if project_db(root).is_file():
             return root, None
         if (root / ".git").exists():
             break
-    raise PanelError("当前聊天目录未对应到 workLog 项目。请从项目目录建立本地聊天。")
+    raise PanelError("当前聊天未找到 workLog 项目。请从项目目录建立本地聊天。", "not_initialized")
 
 
 @contextmanager
-def project_reader(cwd):
-    root, expected_id = locate_project(cwd)
+def open_project(root, expected_id=None):
+    if root.resolve() != root:
+        raise PanelError("项目目录已变化。请核对实际目录和 workLog 登记后刷新。", "invalid_project_path")
     database = project_db(root)
     if not database.is_file() or database.resolve() != database:
-        raise PanelError("当前项目的 workLog 数据库不可用。")
+        raise PanelError("workLog 数据库不可用。请核对项目目录中的数据库后刷新。", "invalid_database")
     with closing(connect(database, "ro")) as db, db:
         db.execute("BEGIN")
         version = schema_version(db)
@@ -59,7 +67,7 @@ def project_reader(cwd):
 
 def latest_progress_record(db, task_id):
     row = db.execute(
-        "SELECT summary, recorded_at, client, details_json FROM context_index"
+        "SELECT summary, recorded_at, client, session_id, details_json FROM context_index"
         " WHERE task_id = ? AND kind = 'PROGRESS' AND status = 'CURRENT'"
         " ORDER BY recorded_at DESC, position DESC LIMIT 1",
         (task_id,),
@@ -68,6 +76,7 @@ def latest_progress_record(db, task_id):
         return None
     return {
         "summary": row["summary"], "recorded_at": row["recorded_at"], "client": row["client"],
+        "session_id": row["session_id"],
         "next_step": json.loads(row["details_json"]).get("suggested_next_step"),
     }
 
@@ -77,36 +86,90 @@ def newest(*records):
                key=lambda record: record["recorded_at"], default=None)
 
 
-def task_card(db, task):
+def task_card(db, task, revision):
     task_id = task["task_id"]
     recent_entry = latest_entry(db, task_id)
     handoff = recent_entry if recent_entry and recent_entry["kind"] == "HANDOFF" else latest_entry(db, task_id, "HANDOFF")
     legacy_progress = recent_entry if recent_entry and recent_entry["kind"] == "PROGRESS" else latest_entry(db, task_id, "PROGRESS")
     saved_progress = latest_progress_record(db, task_id)
-    progress = newest(saved_progress, legacy_progress)
+    progress = newest(saved_progress, legacy_progress) or handoff
     next_record = newest(saved_progress, recent_entry) if task["status"] not in TERMINAL_TASK_STATES else None
     return {
         "id": task_id,
         "number": task["number"],
         "title": task["title"],
         "status": task["display_status"],
-        "progress": {"summary": progress["summary"], "at": progress["recorded_at"], "client": progress["client"]} if progress else None,
+        "lifecycle": task["status"],
+        "revision": revision,
+        "updatedAt": task["updated_at"],
+        "progress": {
+            "summary": progress["summary"], "at": progress["recorded_at"],
+            "client": progress["client"], "sessionId": progress["session_id"],
+        } if progress else None,
         "nextStep": next_record["next_step"] if next_record else None,
         "handoff": {
             "id": handoff["entry_id"], "summary": handoff["summary"], "at": handoff["recorded_at"],
-            "client": handoff["client"], "nextStep": handoff["next_step"],
+            "client": handoff["client"], "sessionId": handoff["session_id"], "nextStep": handoff["next_step"],
         } if handoff else None,
     }
 
 
-def view_project(cwd):
-    with project_reader(cwd) as (db, project):
-        view = {
+def project_view(root, expected_id=None):
+    with open_project(root, expected_id) as (db, project):
+        revisions = {row["task_id"]: row["revision"] for row in db.execute(
+            "SELECT task_id, revision FROM tasks WHERE archived = 0"
+        )}
+        database = project_db(root)
+        return {
             "state": "ready",
+            "id": project["project_id"],
+            "generation": project["data_generation"],
             "projectName": project["name"],
-            "tasks": [task_card(db, task) for task in project_tasks(db)],
-        }
-        return view, project_key(project)
+            "path": str(root),
+            "writable": os.access(database, os.W_OK) and os.access(database.parent, os.W_OK | os.X_OK),
+            "tasks": [task_card(db, task, revisions[task["task_id"]]) for task in project_tasks(db)],
+        }, project_key(project)
+
+
+def view_project(cwd):
+    return project_view(*locate_project(cwd))
+
+
+def view_dashboard():
+    registry = registry_path()
+    try:
+        registered = read_registry(registry)
+    except WorklogError:
+        raise PanelError("workLog 项目登记格式有误。请检查登记文件后刷新。", "invalid_registry") from None
+    except OSError:
+        raise PanelError("无法访问 workLog 项目登记。请检查文件读取权限后刷新。", "registry_unreadable") from None
+
+    projects = []
+    for path, item in sorted(registered.items()):
+        expected_id = item["project_id"]
+        root = Path(path)
+        try:
+            view, _ = project_view(root, expected_id)
+        except READ_ERRORS as error:
+            view = {**unavailable(error), "id": expected_id, "path": path,
+                    "projectName": root.name or path, "writable": False}
+        projects.append(view)
+    counts = Counter(view["id"] for view in projects if view["state"] == "ready")
+    for index, view in enumerate(projects):
+        if view["state"] == "ready" and counts[view["id"]] > 1:
+            projects[index] = {
+                "id": view["id"], "path": view["path"], "projectName": view["projectName"], "writable": False,
+                **unavailable(PanelError("多个登记目录读取到相同项目 ID。请核对项目登记后刷新。", "duplicate_project")),
+            }
+    return {"state": "ready", "projects": projects}
+
+
+def registered_target(root, expected_project):
+    registered = read_registry(registry_path())
+    item = registered.get(str(root))
+    if item is None or item["project_id"] != expected_project[0]:
+        raise PanelError("项目登记已变化。请刷新 Dashboard 后再试。", "project_mismatch")
+
 
 
 def project_key(project):
@@ -114,10 +177,11 @@ def project_key(project):
 
 
 @contextmanager
-def task_reader(cwd, task_id, expected_project):
-    with project_reader(cwd) as (db, project):
+def task_reader(cwd, task_id, expected_project, *, exact=False):
+    root, registered_id = (cwd, expected_project[0]) if exact else locate_project(cwd)
+    with open_project(root, registered_id) as (db, project):
         if project_key(project) != expected_project:
-            raise PanelError("当前项目数据已更换，请刷新任务列表后再试。")
+            raise PanelError("当前项目数据已更换，请刷新任务列表后再试。", "project_mismatch")
         try:
             task = task_row(db, task_id)
         except WorklogError as error:
@@ -129,8 +193,8 @@ def task_reader(cwd, task_id, expected_project):
         yield db, task
 
 
-def read_handoff(cwd, task_id, entry_id, expected_project):
-    with task_reader(cwd, task_id, expected_project) as (db, _):
+def read_handoff(cwd, task_id, entry_id, expected_project, *, exact=False):
+    with task_reader(cwd, task_id, expected_project, exact=exact) as (db, _):
         handoff = latest_entry(db, task_id, "HANDOFF")
         if not handoff or handoff["entry_id"] != entry_id:
             raise PanelError("这条交接已变化或不可用，请刷新任务列表后再试。")
@@ -168,7 +232,10 @@ def status_events(changes):
         task = change["task"]
         base = task["status"]
         command = change["kind"]
-        if command in ("task-archive", "task-unarchive"):
+        claim = task.get("active_run") if command == "claim" else None
+        if claim:
+            summary = "接手任务"
+        elif command in ("task-archive", "task-unarchive"):
             summary = "任务已归档" if command == "task-archive" else "任务已恢复显示"
         elif previous_display and (display != previous_display or base != previous_base):
             before, after = (previous_display, display) if display != previous_display else (previous_base, base)
@@ -182,11 +249,19 @@ def status_events(changes):
         reason = change.get("lifecycle", {}).get("reason")
         if reason:
             details.extend(["", reason])
-        if command == "task-complete" and task.get("completion"):
-            details.extend(["", task["completion"]["completed_scope"]])
+        if claim:
+            details.extend(["", f"来源会话：{claim['client']} · {claim['session_id']}"])
+        completion = task.get("completion") if command == "task-complete" else None
+        if completion:
+            details.extend(["", "完成范围", completion["completed_scope"], "", "完成依据"])
+            details.extend(f"{item['command']} {item['id']}" for item in completion["evidence"])
+            if completion["todo_dispositions"]:
+                details.extend(["", "待办处置", *completion["todo_dispositions"].values()])
         yield ({
             "id": change_id, "kind": "STATUS", "source": "change",
-            "summary": summary, "at": change["committed_at"], "client": None, "superseded": False,
+            "summary": summary, "at": change["committed_at"],
+            "client": claim["client"] if claim else None, "sessionId": claim["session_id"] if claim else None,
+            "superseded": False,
         }, "\n".join(details))
 
 
@@ -209,7 +284,7 @@ def todos_view(db, task, changes):
         status = row["status"]
         outcome = json.loads(row["details_json"]).get("outcome_md")
         if status == "OPEN":
-            if key in dispositions:
+            if key in dispositions and (task["status"] == "DONE" or key not in open_ids):
                 status, outcome = "DISPOSED", dispositions[key]
             elif key not in open_ids:
                 status = "INACTIVE"
@@ -221,34 +296,48 @@ def todos_view(db, task, changes):
 def history_view(db, task_id, changes):
     history = [{
         "id": row["entry_id"], "kind": row["kind"], "source": "entry",
-        "summary": row["summary"], "at": row["recorded_at"], "client": row["client"], "superseded": False,
+        "summary": row["summary"], "at": row["recorded_at"], "client": row["client"],
+        "sessionId": row["session_id"], "superseded": False,
     } for row in entry_refs(db, task_id)]
     rows = db.execute(
-        "SELECT record_id, kind, scope, summary, recorded_at, client, superseded_by FROM context_index"
+        "SELECT record_id, kind, scope, summary, recorded_at, client, session_id, superseded_by FROM context_index"
         " WHERE (task_id = ? OR related_task_id = ?) AND kind IN ('PROGRESS', 'DECISION')",
         (task_id, task_id),
     )
     history.extend({
         "id": row["record_id"], "kind": row["kind"], "source": "record",
         "summary": row["summary"], "at": row["recorded_at"], "client": row["client"],
-        "projectRecord": row["scope"] == "PROJECT", "superseded": row["superseded_by"] is not None,
+        "sessionId": row["session_id"], "projectRecord": row["scope"] == "PROJECT", "superseded": row["superseded_by"] is not None,
     } for row in rows)
     history.extend(item for item, _ in status_events(changes))
     return sorted(history, key=lambda item: item["at"], reverse=True)
 
 
-def task_sections(cwd, task_id, expected_project):
-    with task_reader(cwd, task_id, expected_project) as (db, task):
+def participating_sessions(db, task_id):
+    pairs = {(row["client"], row["session_id"]) for row in run_history(db, task_id)}
+    pairs.update(tuple(row) for row in db.execute(
+        "SELECT client, session_id FROM context_records"
+        " WHERE (task_id = ? OR related_task_id = ?) AND kind = 'PROGRESS'",
+        (task_id, task_id),
+    ))
+    return [{"client": client, "sessionId": session} for client, session in sorted(
+        (client, session) for client, session in pairs if client and session
+    )]
+
+
+def task_sections(cwd, task_id, expected_project, *, exact=False):
+    with task_reader(cwd, task_id, expected_project, exact=exact) as (db, task):
         changes = list(task_changes(db, task_id))
         return {
             "state": "ready",
             "todos": todos_view(db, task, changes),
             "history": history_view(db, task_id, changes),
+            "sessions": participating_sessions(db, task_id),
         }
 
 
-def read_history(cwd, task_id, source, record_id, expected_project):
-    with task_reader(cwd, task_id, expected_project) as (db, _):
+def read_history(cwd, task_id, source, record_id, expected_project, *, exact=False):
+    with task_reader(cwd, task_id, expected_project, exact=exact) as (db, _):
         if source == "entry":
             row = db.execute(
                 "SELECT body_md, kind, next_step FROM entries WHERE task_id = ? AND entry_id = ?",
@@ -274,19 +363,24 @@ def read_history(cwd, task_id, source, record_id, expected_project):
 
 def unavailable(error):
     if isinstance(error, UnsupportedSchema):
-        return {"state": "unavailable", "message": str(error), "schemaVersion": error.version,
+        return {"state": "unavailable", "code": error.code, "message": str(error), "schemaVersion": error.version,
                 "supportedSchemas": [SCHEMA_VERSION]}
+    code = getattr(error, "code", "unavailable")
     if isinstance(error, PanelError):
         message = str(error)
     elif isinstance(error, WorklogError) and error.code == "project_mismatch":
         message = "数据库身份与 workLog 项目登记不一致。请核对项目登记。"
+    elif code == "invalid_project_path":
+        message = "找不到登记的项目目录。请恢复目录或修正项目登记后刷新。"
+    elif code == "invalid_registry":
+        message = "无法读取 workLog 项目登记。请检查登记文件的格式和读取权限后刷新。"
     elif isinstance(error, sqlite3.Error):
-        message = "workLog 数据库读取失败。请检查数据库是否可读、格式是否完整，再刷新侧栏。"
+        message = "workLog 数据库读取失败。请检查数据库是否可读、格式是否完整，再刷新。"
     elif isinstance(error, OSError):
-        message = "无法访问当前项目的 workLog 文件。请检查文件和读取权限，再刷新侧栏。"
+        message = "无法访问当前项目的 workLog 文件。请检查文件和读取权限，再刷新。"
     else:
-        message = "workLog 项目数据或登记格式无法读取。请检查项目后再刷新侧栏。"
-    return {"state": "unavailable", "message": message}
+        message = "workLog 项目数据或登记格式无法读取。请检查项目后再刷新。"
+    return {"state": "unavailable", "code": code, "message": message}
 
 
-READ_ERRORS = (PanelError, WorklogError, sqlite3.Error, OSError, ValueError)
+READ_ERRORS = (PanelError, WorklogError, sqlite3.Error, OSError, ValueError, RuntimeError)

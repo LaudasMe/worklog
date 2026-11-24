@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+import re
 import stat
 import sys
 
@@ -18,7 +19,7 @@ from package_skill import build_package
 
 PLUGIN_FILES = (
     ".codex-plugin/plugin.json", "codex_skill_version.py", "panel.html",
-    "project_panel.py", "release-version.json", "server.py",
+    "project_panel.py", "release-version.json", "server.py", "task_actions.py",
 )
 RUNTIME_FILES = (
     "worklog_projects.py", "worklog_release.py",
@@ -26,12 +27,17 @@ RUNTIME_FILES = (
 )
 
 
-def build_full_package(output_dir):
+def build_full_package(output_dir, *, candidate_version=None):
     plugin = EXAMPLE / "worklog-panel"
     version = json.loads((plugin / "release-version.json").read_text(encoding="utf-8"))
     plugin_manifest = json.loads((plugin / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
     if f"gui-codex-v{plugin_manifest['version']}" != version["version"]:
         raise ValueError("插件版本与 Codex GUI 发布版本不一致。")
+    if candidate_version is not None:
+        if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", candidate_version):
+            raise ValueError("本机候选包需要 X.Y.Z 格式的插件版本。")
+        plugin_manifest["version"] = candidate_version
+        version["version"] = f"gui-codex-v{candidate_version}"
     archive_root = f"worklog-codex-gui-v{plugin_manifest['version']}"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{archive_root}-full.zip"
@@ -48,6 +54,18 @@ def build_full_package(output_dir):
         sources.update({f"worklog-panel/{name}": plugin / name for name in PLUGIN_FILES})
         sources.update({f"worklog-panel/runtime/{name}": REPO / name for name in RUNTIME_FILES})
         payload = {name: source.read_bytes() for name, source in sources.items()}
+        if candidate_version is not None:
+            plugin_manifest["description"] = "在 Codex 中查看本机 workLog 总览和当前项目。"
+            plugin_manifest["interface"]["shortDescription"] = "在 Dashboard 和项目侧栏查看和管理任务。"
+            for name, manifest in (
+                (".codex-plugin/plugin.json", plugin_manifest), ("release-version.json", version),
+            ):
+                payload[f"worklog-panel/{name}"] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
+            docs = payload["INSTALL.md"].decode()
+            docs = docs.replace("worklog-codex-gui-v0.1.0", archive_root).replace("gui-codex-v0.1.0", version["version"])
+            payload["INSTALL.md"] = ("# 本机 Dashboard 候选包\n\n"
+                "此包用于本机验收。安装后从 Codex 主侧栏应用列表打开或固定 workLog Dashboard。"
+                "聊天右侧可以继续使用 workLog 项目侧栏。\n\n" + docs).encode()
         payload["sha256.json"] = (
             json.dumps({name: sha256(data).hexdigest() for name, data in payload.items()},
                        indent=2, sort_keys=True) + "\n"
@@ -94,14 +112,16 @@ def build_release_assets(output_dir):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=REPO / "dist")
-    parser.add_argument("--release-assets", action="store_true", help="同时生成下载脚本和 SHA-256 校验文件。")
+    variant = parser.add_mutually_exclusive_group()
+    variant.add_argument("--candidate-version", help="指定本机候选包的插件版本（X.Y.Z）")
+    variant.add_argument("--release-assets", action="store_true", help="同时生成下载脚本和 SHA-256 校验文件。")
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     if args.release_assets:
         for asset in build_release_assets(output_dir):
             print(asset)
     else:
-        print(build_full_package(output_dir))
+        print(build_full_package(output_dir, candidate_version=args.candidate_version))
 
 
 if __name__ == "__main__":

@@ -1,254 +1,347 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="zh-Hans" data-surface="project">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>workLog</title>
 <style>
   :root {
     color-scheme: light dark;
-    font: 14px/1.6 system-ui, sans-serif;
-    --text: #232830;
-    --muted: #5b6574;
-    --page: #fff;
-    --surface: #f2f4f8;
-    --line: #d8dde5;
-    --accent: #214e83;
-    --selected: #ebf2fd;
-    --selected-border: #9aafc6;
-    --todo: #687689;
-    --in-progress: #2866aa;
-    --blocked: #ad3c45;
-    --paused: #976019;
-    --done: #2a755b;
-    --cancelled: #78578f;
+    color: var(--text);
+    background: var(--page);
+    font: 13px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --text: light-dark(#25282e, #e9ebef);
+    --muted: light-dark(#5d6571, #abb1bb);
+    --page: light-dark(#fff, #202226);
+    --surface: light-dark(#f4f5f8, #272a31);
+    --detail-surface: light-dark(#f7f8fb, #171a1f);
+    --line: light-dark(#dce0e6, #3b3f48);
+    --accent: light-dark(#234d7d, #bcd5ff);
+    --selected: light-dark(#edf4ff, #2a3b55);
+    --selected-border: color-mix(in srgb, var(--accent) 35%, var(--line));
+    --next-surface: light-dark(#eef4fc, #253347);
+    --next-line: light-dark(#d3e2f4, #394c64);
+    --danger: light-dark(#982f40, #f0a4ae);
+    --gutter: 14px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --text: #e9edf2;
-      --muted: #abb6c6;
-      --page: #202226;
-      --surface: #2a2e36;
-      --line: #414955;
-      --accent: #9cc5ff;
-      --selected: #293d57;
-      --selected-border: #537ba6;
-      --todo: #aebacb;
-      --in-progress: #8bbdff;
-      --blocked: #f39ba2;
-      --paused: #e6b16e;
-      --done: #82c8ab;
-      --cancelled: #c3a4dc;
-    }
-  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; color: var(--text); background: var(--page); }
+  html, body { margin: 0; }
+  body { color: var(--text); background: var(--page); overflow-wrap: anywhere; }
   h1, h2, h3, h4, p { margin: 0; }
-  button {
-    border: 0;
-    font: inherit;
-    color: inherit;
-    background: transparent;
-    cursor: pointer;
-  }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button, select, textarea, input { font: inherit; color: inherit; }
+  button { border: 0; background: transparent; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .6; }
+  :is(button, summary, input, textarea, select, a):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .icon {
-    width: 1.15em;
-    height: 1.15em;
-    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    flex: none;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .project-header { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-  .wordmark { font-size: 16px; font-weight: 700; }
-  #project-name {
-    padding-inline-start: 12px;
-    margin-inline-start: 12px;
-    border-inline-start: 1px solid var(--line);
-    overflow-wrap: anywhere;
+  .project-header {
+    display: flex;
+    align-items: baseline;
+    gap: 5px 12px;
+    flex-wrap: wrap;
+    padding: 8px var(--gutter);
+    border-bottom: 1px solid var(--line);
   }
-  #check-updates { margin-inline-start: auto; white-space: nowrap; }
-  main { padding: 16px; overflow-wrap: anywhere; }
-  #panel-status, .empty, .meta { color: var(--muted); font-size: 12px; }
-  .list-header, .list-title, .list-actions, .filter-label, .badge, .handoff-header, .original h4, .meta {
+  .wordmark { font-weight: 650; }
+  #project-name { padding-inline-start: 12px; border-inline-start: 1px solid var(--line); }
+  .header-actions { margin-inline-start: auto; display: flex; gap: 7px; flex-wrap: wrap; }
+  [data-surface="dashboard"] #check-updates, [data-surface="project"] #project-picker { display: none; }
+  main { padding: 12px var(--gutter); }
+  [data-surface="dashboard"] main { max-width: 1060px; margin-inline: auto; }
+  #panel-status, .empty, .meta { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .list-header, .list-title, .list-actions, .handoff-header, .original h4, .meta {
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  #refresh-status { margin-top: 5px; }
+  #refresh-status:empty { display: none; }
+  #refresh-status { margin-bottom: 8px; }
   .list-header { justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; }
-  .list-title { font-size: 19px; line-height: 1.3; }
-  .list-title .icon, .fact > .icon, .handoff-icon, .original .icon { color: var(--muted); }
-  .filters {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(83px, 100%), 1fr));
-    gap: 4px;
-    padding: 4px;
-    margin: 12px 0 10px;
-    background: var(--surface);
-    border-radius: 9px;
+  .list-title { gap: 8px; font-size: 18px; line-height: 1.35; font-weight: 650; }
+  .list-title .icon, .handoff-icon, .original .icon { color: var(--muted); }
+  .list-actions { flex-wrap: wrap; }
+  #project-picker { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  select { max-width: min(220px, 55vw); }
+  select, input, textarea {
+    background: var(--page);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 4px 7px;
   }
-  .filter {
-    display: grid;
-    place-items: center;
-    gap: 3px;
-    padding: 3px 4px 5px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    white-space: nowrap;
-    font-size: 12px;
-  }
-  .filter:hover { background: var(--page); }
-  .filter[aria-pressed="true"] {
-    color: var(--accent);
-    font-weight: 650;
-    background: var(--selected);
-    border-color: var(--selected-border);
-  }
-  .filter-track {
-    display: flex;
-    align-items: end;
-    justify-content: center;
-    width: 100%;
-    height: 12px;
-    border-bottom: 1px solid var(--line);
-  }
-  .filter-bar {
-    width: 40%;
-    height: var(--bar-height);
-    border-radius: 2px 2px 0 0;
-    background: var(--status-color, var(--muted));
-    opacity: .53;
-  }
-  .filter[aria-pressed="true"] .filter-bar { opacity: 1; }
-  .filter-label .icon, .badge .icon { color: var(--status-color, var(--muted)); }
-  .task { padding: 12px 0; border-top: 1px solid var(--line); }
-  .task-toggle {
-    display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 7px;
-    width: 100%;
-    padding: 0;
-    text-align: start;
-  }
-  .task-toggle .icon-chevron { width: 10px; margin-top: 4px; color: var(--muted); }
-  [aria-expanded="true"] > .icon-chevron { rotate: 90deg; }
-  .task-title { font-size: 15px; font-weight: 700; line-height: 1.45; }
-  .task-meta { justify-content: end; flex-wrap: wrap; gap: 2px 6px; font-weight: 400; }
-  .badge {
-    gap: 4px;
-    padding: 0 5px;
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--status-color) 11%, var(--page));
-    white-space: nowrap;
-  }
-  .facts, .task-detail { margin-inline-start: 17px; }
-  .facts { display: grid; gap: 4px; margin-top: 8px; }
-  .fact { display: grid; grid-template-columns: 16px 4.05em minmax(0, 1fr); align-items: start; gap: 5px; }
-  .fact > .icon { margin-top: .18em; }
-  .fact .meta { flex-wrap: wrap; gap: 2px 4px; }
-  .fact-key { font-size: 12px; color: var(--muted); line-height: 1.9; }
-  .next .fact-key, .next > .icon, .next-value { color: var(--text); font-weight: 650; }
-  .task-detail { padding-top: 10px; margin-top: 12px; border-top: 1px solid var(--line); }
-  .handoff-header { flex-wrap: wrap; gap: 2px 7px; }
-  .handoff-header h3 { font-size: 14px; }
-  .handoff-icon {
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--surface);
-  }
-  .handoff-summary, .original { margin: 6px 0 0 27px; }
-  .text-button {
-    color: var(--accent);
+  .icon-button {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px;
+    justify-content: center;
+    width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--accent);
+  }
+  .icon-button:not(:disabled):hover { background: var(--selected); }
+  .filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 9px; }
+  .filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 27px;
+    padding: 3px 5px;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    color: var(--muted);
+    white-space: nowrap;
     font-size: 12px;
-    font-weight: 650;
   }
-  .text-button:not(:disabled):hover { text-decoration: underline; }
-  .text-button:disabled { color: var(--muted); cursor: default; }
-  .text-button .icon-chevron { rotate: 90deg; }
-  .text-button[aria-expanded="true"] .icon-chevron { rotate: -90deg; }
-  .original {
-    border-inline-start: 2px solid var(--line);
-    padding: 9px 11px;
+  .filter:hover { background: var(--surface); }
+  .filter[aria-pressed="true"] { color: var(--accent); font-weight: 600; background: var(--selected); border-color: var(--selected-border); }
+  .filter .icon { width: 12px; height: 12px; color: var(--status-color, var(--muted)); }
+  .filter .count { font-size: 11px; }
+  #tasks { display: grid; gap: 8px; }
+  .group { min-width: 0; border: 1px solid var(--line); border-radius: 9px; overflow: clip; }
+  .group-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
     background: var(--surface);
-    border-start-end-radius: 6px;
-    border-end-end-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
   }
-  .original h4 { font-size: 13px; color: var(--muted); }
+  .group-heading .icon { width: 13px; height: 13px; color: var(--status-color, var(--muted)); }
+  .group-heading .icon-chevron { width: 10px; }
+  .group-heading .count { margin-inline-start: auto; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .task + .task, .group-heading + .task-rows:not(:empty) { border-top: 1px solid var(--line); }
+  .group-note { padding: 8px 9px; }
+  .task-heading {
+    --task-prefix: 12px max(34px, var(--task-number-width)) 29px;
+    --task-gap: 6px;
+    display: grid;
+    grid-template-columns: var(--task-prefix) minmax(0, 1fr) 68px;
+    gap: var(--task-gap);
+    align-items: center;
+    padding-inline: 8px;
+  }
+  .task-toggle {
+    grid-row: 1;
+    grid-column: 1 / 6;
+    display: grid;
+    grid-template-columns: var(--task-prefix) minmax(0, 1fr) 68px;
+    align-items: center;
+    gap: var(--task-gap);
+    width: 100%;
+    min-height: 38px;
+    padding: 4px 0;
+    text-align: start;
+  }
+  .task-heading:hover, .task-heading:has([aria-expanded="true"].task-toggle) { background: var(--surface); }
+  .task-heading:has([aria-expanded="true"].task-toggle) { box-shadow: inset 2px 0 var(--accent); }
+  .task-toggle > .icon-chevron { width: 10px; color: var(--muted); }
+  [aria-expanded="true"] > .icon-chevron { rotate: 90deg; }
+  .task-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11.5px; font-weight: 400; }
+  .task-title { grid-column: 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 500; }
+  .task-toggle[aria-expanded="true"] .task-title { overflow-wrap: anywhere; white-space: normal; font-weight: 600; }
+  .task-status {
+    grid-row: 1;
+    grid-column: 3;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 29px;
+    min-height: 27px;
+    padding: 2px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--status-color, var(--muted));
+  }
+  .task-status:not(:disabled):hover, .task-status[aria-expanded="true"] { border-color: var(--line); background: var(--page); }
+  .task-status:disabled { opacity: 1; }
+  .task-status .icon { width: 14px; height: 14px; }
+  .caret { width: 4px; height: 4px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .task-updated {
+    grid-row: 1;
+    grid-column: 5;
+    text-align: end;
+    white-space: nowrap;
+    pointer-events: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .task-detail { padding: 11px 10px 12px; border-top: 1px solid var(--line); background: var(--detail-surface); line-height: 1.62; }
+  .facts, .task-extra { display: grid; gap: 9px; }
+  .progress { padding-inline: 9px; }
+  .progress-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
+  .fact-key, .handoff h3 { font-size: 12px; font-weight: 650; }
+  .progress-value { margin-top: 4px; }
+  .next {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    gap: 7px;
+    padding: 8px 9px;
+    border: 1px solid var(--next-line);
+    border-radius: 7px;
+    background: var(--next-surface);
+  }
+  .next > .icon { margin-top: 2px; }
+  .next :is(.fact-key, .icon) { color: var(--accent); }
+  .next-value { margin-top: 1px; font-weight: 600; }
+  .next[data-empty] { border-color: var(--line); background: var(--page); }
+  .next[data-empty] :is(.fact-key, .icon, .next-value), .progress-value[data-empty] { color: var(--muted); }
+  .next[data-empty] .next-value { font-weight: 400; }
+  .next .continue-task { align-self: center; }
+  .next .continue-task .icon { color: var(--accent); }
+  .task-extra { margin-top: 9px; }
+  .handoff, .task-sections { border: 1px solid var(--line); border-radius: 7px; background: var(--page); }
+  .handoff { padding: 7px 9px 8px; }
+  .handoff-header { flex-wrap: wrap; gap: 2px 7px; }
+  .handoff-header .icon-button { margin-inline-start: auto; }
+  .handoff-icon { display: flex; }
+  .handoff-icon .icon { width: 13px; height: 13px; }
+  .handoff-summary { margin-top: 3px; }
+  .original { margin: 7px 0 0; max-inline-size: 42em; border-inline-start: 2px solid var(--line); padding: 7px 10px; background: var(--surface); border-radius: 0 6px 6px 0; }
+  .original h4 { font-size: 12px; color: var(--muted); }
   .progress-value, .next-value, .handoff-summary, .original-text, .original-next p { white-space: pre-wrap; }
-  .original-text, .original-next p { margin-top: 6px; }
-  .original-next { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .original-text, .original-next p { margin-top: 4px; }
+  .original-next { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); }
   .original-next h4 { color: var(--text); }
-  .original .empty { margin-top: 4px; }
-  .task-sections { margin-top: 12px; }
-  .task-section, .history-entries > li + li { border-top: 1px solid var(--line); }
-  .task-section summary, .history-entry summary { list-style: none; cursor: pointer; }
+  .task-section + .task-section, .history-entries > li + li { border-top: 1px solid var(--line); }
+  summary { list-style: none; cursor: pointer; }
   summary::-webkit-details-marker { display: none; }
-  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .section-toggle, .history-toggle {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
     align-items: center;
     gap: 7px;
-    min-height: 40px;
-    padding: 6px 5px 6px 0;
+    min-height: 34px;
+    padding: 5px 9px;
     border-radius: 4px;
+    font-size: 12px;
   }
   .section-toggle:hover, .history-toggle:hover { background: var(--surface); }
   .section-toggle > .icon, .history-icon, .todo-items .icon { color: var(--muted); }
-  .section-heading, .history-caption { font-weight: 650; }
-  .section-heading .meta { display: inline; margin-inline-start: 8px; font-weight: 400; }
-  summary .icon-chevron { color: var(--accent); }
+  .section-heading { font-weight: 650; }
+  .history-caption { font-weight: 500; }
+  .section-heading .meta { display: inline; margin-inline-start: 7px; font-weight: 400; }
+  summary .icon-chevron { width: 11px; color: var(--accent); }
   details[open] > summary .icon-chevron { rotate: 90deg; }
-  .section-content { padding: 0 0 8px 24px; }
-  .section-content > .empty { margin: 5px 0; }
+  .section-content { padding: 0 9px 8px 26px; }
   .todo-items, .history-entries { list-style: none; margin: 0; padding: 0; }
   .todo-items li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 7px; padding: 4px 0; }
-  .todo-items li > .icon, .history-icon { margin-top: 3px; }
+  .todo-items li > .icon, .history-icon { margin-top: 2px; }
   .todo-status { display: inline; margin-inline-end: 6px; }
   .todo-outcome { display: block; white-space: pre-wrap; }
-  .processed-toggle, .history-action { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; }
-  .processed-toggle { min-height: 34px; }
-  .history-toggle { align-items: start; }
+  .processed-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12px; }
+  .processed-toggle { min-height: 30px; }
+  .history-toggle { align-items: start; padding-inline-start: 1px; }
   .history-meta { flex-wrap: wrap; gap: 2px 7px; }
   .history-kind { color: var(--text); }
-  .history-action { margin-top: 2px; }
-  .history-entry:not([open]) .history-hide, .history-entry[open] .history-show { display: none; }
+  .session-items { margin: 0; padding-inline-start: 14px; }
+  .source-session { overflow-wrap: anywhere; }
   .history-entry > .original { margin: 0 0 8px; }
-  .details-state { margin-top: 8px; }
+  .text-button { color: var(--accent); display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .text-button:not(:disabled):hover { background: var(--surface); }
+  .release-link { color: var(--accent); font-size: 12px; }
+  .release-address { user-select: all; }
   #updates-view { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
   .update-component h2 { font-size: 14px; }
   .update-component + .update-component { margin-top: 10px; }
   .update-component dl { margin: 3px 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 8px; }
   .update-component dt { color: var(--muted); font-size: 12px; }
   .update-component dd { margin: 0; }
-  .release-link { color: var(--accent); font-size: 12px; }
-  .release-address { user-select: all; }
-  .tasks-empty { padding: 10px 0; border-top: 1px solid var(--line); }
-  [data-status="TODO"] { --status-color: var(--todo); }
-  [data-status="IN_PROGRESS"] { --status-color: var(--in-progress); }
-  [data-status="BLOCKED"] { --status-color: var(--blocked); }
-  [data-status="PAUSED"] { --status-color: var(--paused); }
-  [data-status="DONE"] { --status-color: var(--done); }
-  [data-status="CANCELLED"] { --status-color: var(--cancelled); }
-  @media (max-width: 310px) {
-    .project-header { padding-inline: 12px; }
-    main { padding-inline: 12px; }
-    .task-toggle { grid-template-columns: 10px minmax(0, 1fr); gap: 2px 7px; }
-    .task-meta { grid-column: 2; justify-content: start; }
-    .section-content { padding-inline-start: 8px; }
-    .history-toggle { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px; }
+  .tasks-empty { padding-block: 8px; }
+  .tasks-empty .text-button { margin-block-start: 3px; }
+  .guide-empty { max-width: 34rem; margin-inline: auto; }
+  [data-surface="dashboard"] .guide-empty { margin-block-start: clamp(28px, 10vw, 74px); }
+  .guide-empty h1 { font-size: clamp(20px, 3.2vw, 27px); line-height: 1.3; }
+  .guide-instruction { color: var(--muted); margin-block: 8px 12px; }
+  .guide-instruction strong { color: var(--text); }
+  .guide-icon { width: 44px; height: 44px; display: grid; place-items: center; color: var(--accent); background: var(--selected); border-radius: 10px; margin-bottom: 10px; }
+  .guide-icon .icon { width: 23px; height: 23px; }
+  .guide-prompt { margin-bottom: 9px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); user-select: text; }
+  .guide-copy { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 6px 10px; border-radius: 6px; background: var(--accent); color: var(--page); font-weight: 600; }
+  .guide-copy:hover { background: color-mix(in srgb, var(--accent) 90%, var(--text)); }
+  .guide-copy:focus-visible { outline-offset: 2px; }
+  .guide-feedback { color: light-dark(#176550, #9ddfc5); font-size: 13px; }
+  .guide-feedback:not(:empty) { margin-top: 6px; }
+  .guide-empty + #retry-project:not([hidden]) { margin-top: 8px; }
+  [data-surface="project"]:has(#empty-worklog:not([hidden])) #refresh { display: none; }
+  .status-menu {
+    inset: auto;
+    position: fixed;
+    min-width: 118px;
+    max-width: calc(100% - 16px);
+    margin: 0;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--page);
+    color: var(--text);
+    box-shadow: 0 7px 19px #11192730;
+  }
+  .status-menu button { display: block; width: 100%; min-height: 27px; padding: 3px 8px; border-radius: 4px; font-size: 12px; text-align: start; }
+  .status-menu button:is(:hover, :focus-visible) { background: var(--surface); }
+  .status-menu [data-action="cancel"] { color: var(--danger); }
+  dialog {
+    width: min(450px, calc(100% - 20px));
+    max-height: calc(100% - 20px);
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--page);
+    color: var(--text);
+    box-shadow: 0 8px 30px #11192740;
+  }
+  dialog::backdrop { background: #11192750; }
+  dialog h2 { font-size: 17px; }
+  dialog form, .modal-fields { display: grid; gap: 8px; }
+  .modal-fields label { display: grid; gap: 3px; font-size: 12px; font-weight: 600; }
+  .modal-fields :is(select, input, textarea) { max-width: none; width: 100%; min-width: 0; font-size: 13px; font-weight: 400; }
+  .modal-fields textarea { resize: vertical; }
+  .modal-todos { min-width: 0; margin: 0; padding: 5px 7px 7px; border: 1px solid var(--line); border-radius: 6px; }
+  .modal-todos label + label { margin-top: 6px; }
+  .modal-actions { display: flex; justify-content: end; gap: 6px; }
+  .action-button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; }
+  .primary-button { color: var(--accent); background: var(--selected); border: 1px solid var(--selected-border); }
+  .error-text { color: var(--danger); }
+  .error-text:empty { display: none; }
+  [data-status="TODO"] { --status-color: light-dark(#707b8c, #a4afbe); }
+  [data-status="IN_PROGRESS"] { --status-color: light-dark(#2e67aa, #82b5f5); }
+  [data-status="BLOCKED"] { --status-color: light-dark(#b2444a, #efa1a6); }
+  [data-status="PAUSED"] { --status-color: light-dark(#966018, #efc477); }
+  [data-status="DONE"] { --status-color: light-dark(#2e7458, #82d0ad); }
+  [data-status="CANCELLED"] { --status-color: light-dark(#77578d, #c4a6df); }
+  @media (max-width: 440px) {
+    .task-heading { --task-prefix: 10px max(32px, var(--task-number-width)) 29px; --task-gap: 5px; }
+    .task-heading, .task-toggle { grid-template-columns: var(--task-prefix) minmax(0, 1fr) 34px; }
+    .task-clock { display: none; }
+  }
+  @media (max-width: 400px) {
+    :root { --gutter: 10px; }
+    .task-detail { padding: 9px 8px 10px; }
+    .section-content { padding-inline-start: 9px; }
+  }
+  @media (max-width: 345px) {
+    .filters { gap: 3px; }
+    .filter { padding-inline: 3px; gap: 3px; font-size: 11px; }
+    .filter .icon { width: 10px; height: 10px; }
+  }
+  @media (pointer: coarse) {
+    :is(.icon-button, .filter, .task-toggle, .task-status, .section-toggle, .history-toggle, .processed-toggle) { min-height: 44px; }
+    .icon-button { width: 44px; }
   }
 </style>
 <svg aria-hidden="true" width="0" height="0" style="position:absolute">
@@ -267,112 +360,152 @@
   <symbol id="icon-handoff" viewBox="0 0 24 24"><path d="M20 7H4m4-4L4 7l4 4m-4 6h16m-4-4 4 4-4 4"/></symbol>
   <symbol id="icon-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM13 3v5h5M9 11h6m-6 4h6m-6 3h4"/></symbol>
   <symbol id="icon-handoff-next" viewBox="0 0 24 24"><path d="M4 4v7a4 4 0 0 0 4 4h11m-5-5 5 5-5 5"/></symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0 0 5m0-11v6h-6"/></symbol>
+  <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="icon-resume" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
 </svg>
 <header class="project-header">
   <span class="wordmark">workLog</span>
-  <span id="project-name" hidden></span>
-  <button type="button" id="check-updates" class="text-button" disabled>检查更新</button>
+  <span id="project-name" tabindex="-1" hidden></span>
+  <div class="header-actions">
+    <button type="button" id="refresh" class="text-button" aria-label="刷新任务列表" disabled>
+      <svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg>刷新
+    </button>
+    <button type="button" id="check-updates" class="text-button" disabled>检查更新</button>
+  </div>
 </header>
 <main>
   <section id="updates-view" aria-label="更新检查结果" hidden></section>
+  <p id="refresh-status" class="meta" role="status"></p>
   <p id="panel-status" role="status">正在读取 workLog 任务…</p>
-  <button type="button" id="retry-project" class="text-button" hidden>重试读取任务</button>
+  <section id="empty-worklog" class="guide-empty" hidden></section>
+  <button type="button" id="retry-project" class="text-button" hidden><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg>重试读取任务</button>
   <section id="tasks-view" aria-labelledby="list-heading" hidden>
     <header class="list-header">
       <h1 id="list-heading" class="list-title"><svg class="icon" aria-hidden="true"><use href="#icon-list"/></svg>任务列表</h1>
       <div class="list-actions">
-        <p id="visible-count" class="meta" role="status"></p>
-        <button type="button" id="refresh" class="text-button" aria-label="刷新任务列表">刷新</button>
+        <label id="project-picker">项目 <select id="project-filter" aria-label="筛选项目"></select></label>
+        <button type="button" id="add-task" class="icon-button" aria-label="添加任务" aria-haspopup="dialog" title="添加任务"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
       </div>
     </header>
-    <p id="refresh-status" class="empty" role="status" hidden></p>
     <div id="filters" class="filters" role="group" aria-label="按状态筛选任务"></div>
     <div id="tasks"></div>
-    <p id="tasks-empty" class="empty tasks-empty" hidden></p>
+    <div id="tasks-empty" class="tasks-empty" hidden>
+      <p id="empty-tasks-message" class="empty"></p>
+      <button id="show-all" type="button" class="text-button">查看全部任务</button>
+    </div>
   </section>
 </main>
+<div id="status-menu" class="status-menu" popover="manual"></div>
+<dialog id="task-dialog" aria-labelledby="dialog-heading">
+  <form id="task-form" novalidate>
+    <h2 id="dialog-heading"></h2>
+    <p id="dialog-target" class="meta"></p>
+    <div id="dialog-fields" class="modal-fields"></div>
+    <p id="dialog-error" class="error-text" role="alert"></p>
+    <div class="modal-actions">
+      <button id="dialog-close" type="button" class="action-button">关闭</button>
+      <button id="dialog-submit" type="button" class="action-button primary-button"></button>
+    </div>
+  </form>
+</dialog>
 <template id="task-template">
   <article class="task">
-    <h2>
+    <div class="task-heading">
       <button type="button" class="task-toggle" aria-expanded="false">
         <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        <span class="task-number"></span>
         <span class="task-title"></span>
-        <span class="task-meta meta">
-          <span class="task-number"></span>
-          <span class="badge"></span>
-        </span>
       </button>
-    </h2>
-    <div class="facts">
-      <div class="fact">
-        <svg class="icon" aria-hidden="true"><use href="#icon-progress"/></svg>
-        <span class="fact-key">当前进展</span>
-        <div>
-          <p class="progress-value"></p>
-          <p class="progress-meta meta"><svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg><span></span></p>
-        </div>
-      </div>
-      <div class="fact next">
-        <svg class="icon" aria-hidden="true"><use href="#icon-next"/></svg>
-        <span class="fact-key">下一步</span>
-        <p class="next-value"></p>
-      </div>
+      <button type="button" class="task-status" aria-expanded="false" aria-controls="status-menu"></button>
+      <time class="task-updated" hidden><span class="task-day"></span><span class="task-clock"></span></time>
     </div>
     <section class="task-detail" aria-label="任务详情" hidden>
-      <div class="handoff">
-        <div class="handoff-header">
-          <span class="handoff-icon"><svg class="icon" aria-hidden="true"><use href="#icon-handoff"/></svg></span>
-          <h3>上次交接</h3>
-          <span class="handoff-meta meta"></span>
-          <button type="button" class="original-toggle text-button" aria-expanded="false">
-            <span>查看交接原文</span>
-            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-          </button>
+      <div class="facts">
+        <div class="progress">
+          <div class="progress-heading">
+            <h3 class="fact-key">当前进展</h3>
+            <p class="progress-meta meta"></p>
+          </div>
+          <p class="progress-value"></p>
         </div>
-        <p class="handoff-summary"></p>
-        <div class="original" hidden>
-          <h4><svg class="icon" aria-hidden="true"><use href="#icon-file"/></svg>交接原文</h4>
-          <p class="original-state empty" role="status"></p>
-          <button type="button" class="original-retry text-button" hidden>重试</button>
-          <p class="original-text" hidden></p>
-          <section class="original-next" hidden>
-            <h4><svg class="icon" aria-hidden="true"><use href="#icon-handoff-next"/></svg>交接时的下一步</h4>
-            <p></p>
-          </section>
+        <div class="next">
+          <svg class="icon" aria-hidden="true"><use href="#icon-next"/></svg>
+          <div>
+            <h3 class="fact-key">下一步</h3>
+            <p class="next-value"></p>
+          </div>
+          <button type="button" class="continue-task icon-button" hidden><svg class="icon" aria-hidden="true"><use href="#icon-resume"/></svg></button>
         </div>
+        <p class="continue-feedback error-text" role="status" hidden></p>
       </div>
-      <p class="details-state empty" role="status" hidden></p>
-      <button type="button" class="details-retry text-button" hidden>重试读取任务详情</button>
-      <div class="task-sections" hidden>
-        <details class="task-section todos-section">
-          <summary class="section-toggle">
-            <svg class="icon" aria-hidden="true"><use href="#icon-list"/></svg>
-            <span class="section-heading">待办<span class="meta todo-count"></span></span>
-            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-          </summary>
-          <div class="section-content">
-            <p class="empty todos-empty">暂无未完成待办</p>
-            <ul class="todo-items open-todos" aria-label="未完成待办"></ul>
-            <details class="processed-section">
-              <summary class="processed-toggle">
-                <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-                <span class="processed-count"></span>
-              </summary>
-              <ul class="todo-items processed-todos" aria-label="已处理待办"></ul>
-            </details>
+      <div class="task-extra">
+        <div class="handoff">
+          <div class="handoff-header">
+            <span class="handoff-icon"><svg class="icon" aria-hidden="true"><use href="#icon-handoff"/></svg></span>
+            <h3>上次交接</h3>
+            <span class="handoff-meta meta"></span>
+            <button type="button" class="original-toggle icon-button" aria-label="查看交接原文" title="查看交接原文" aria-expanded="false">
+              <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+            </button>
           </div>
-        </details>
-        <details class="task-section history-section">
-          <summary class="section-toggle">
-            <svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg>
-            <span class="section-heading">全部历史<span class="meta history-count"></span></span>
-            <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-          </summary>
-          <div class="section-content">
-            <p class="empty history-empty">暂无历史记录</p>
-            <ol class="history-entries" aria-label="历史记录，时间倒序"></ol>
+          <p class="handoff-summary"></p>
+          <div class="original" hidden>
+            <h4><svg class="icon" aria-hidden="true"><use href="#icon-file"/></svg>交接原文</h4>
+            <p class="original-state empty" role="status"></p>
+            <button type="button" class="original-retry text-button" hidden>重试</button>
+            <p class="original-text" hidden></p>
+            <section class="original-next" hidden>
+              <h4><svg class="icon" aria-hidden="true"><use href="#icon-handoff-next"/></svg>交接时的下一步</h4>
+              <p></p>
+            </section>
           </div>
-        </details>
+        </div>
+        <p class="details-state empty" role="status" hidden></p>
+        <button type="button" class="details-retry text-button" hidden>重试读取任务详情</button>
+        <div class="task-sections" hidden>
+          <details class="task-section todos-section">
+            <summary class="section-toggle">
+              <svg class="icon" aria-hidden="true"><use href="#icon-list"/></svg>
+              <span class="section-heading">待办<span class="meta todo-count"></span></span>
+              <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+            </summary>
+            <div class="section-content">
+              <p class="empty todos-empty">暂无未完成待办</p>
+              <ul class="todo-items open-todos" aria-label="未完成待办"></ul>
+              <details class="processed-section">
+                <summary class="processed-toggle">
+                  <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+                  <span class="processed-count"></span>
+                </summary>
+                <ul class="todo-items processed-todos" aria-label="已处理待办"></ul>
+              </details>
+            </div>
+          </details>
+          <details class="task-section history-section">
+            <summary class="section-toggle">
+              <svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg>
+              <span class="section-heading">全部历史<span class="meta history-count"></span></span>
+              <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+            </summary>
+            <div class="section-content">
+              <p class="empty history-empty">暂无历史记录</p>
+              <ol class="history-entries" aria-label="历史记录，时间倒序"></ol>
+            </div>
+          </details>
+          <details class="task-section sessions-section" hidden>
+            <summary class="section-toggle">
+              <svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg>
+              <span class="section-heading">参与会话<span class="meta sessions-count"></span></span>
+              <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+            </summary>
+            <div class="section-content">
+              <ul class="session-items" aria-label="参与会话"></ul>
+            </div>
+          </details>
+        </div>
       </div>
     </section>
   </article>
@@ -391,11 +524,7 @@
             <span class="history-superseded" hidden>已被替换</span>
           </span>
         </span>
-        <span class="history-action">
-          <span class="history-show">查看原文</span>
-          <span class="history-hide">收起原文</span>
-          <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-        </span>
+        <svg class="icon icon-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
       </summary>
       <div class="original">
         <p class="original-state empty" role="status"></p>
@@ -427,22 +556,28 @@
   </section>
 </template>
 <script>
-  const panelStatus = document.getElementById("panel-status");
-  const projectName = document.getElementById("project-name");
-  const tasksView = document.getElementById("tasks-view");
-  const visibleCount = document.getElementById("visible-count");
-  const refresh = document.getElementById("refresh");
-  const retryProject = document.getElementById("retry-project");
-  const checkUpdates = document.getElementById("check-updates");
-  const updatesView = document.getElementById("updates-view");
-  const updateTemplate = document.getElementById("update-template");
-  const historyTemplate = document.getElementById("history-template");
-  const refreshStatus = document.getElementById("refresh-status");
-  const filters = document.getElementById("filters");
-  const tasks = document.getElementById("tasks");
-  const tasksEmpty = document.getElementById("tasks-empty");
-  const taskTemplate = document.getElementById("task-template");
+  const byId = (id) => document.getElementById(id);
+  const dashboard = document.documentElement.dataset.surface === "dashboard";
+  const openTool = dashboard ? "open_worklog_dashboard" : "open_worklog_codex_panel";
+  const panelStatus = byId("panel-status");
+  const projectName = byId("project-name");
+  const tasksView = byId("tasks-view");
+  const refresh = byId("refresh");
+  const retryProject = byId("retry-project");
+  const checkUpdates = byId("check-updates");
+  const updatesView = byId("updates-view");
+  const updateTemplate = byId("update-template");
+  const historyTemplate = byId("history-template");
+  const refreshStatus = byId("refresh-status");
+  const filters = byId("filters");
+  const tasks = byId("tasks");
+  const tasksEmpty = byId("tasks-empty");
+  const taskTemplate = byId("task-template");
+  const projectFilter = byId("project-filter");
+  const addTask = byId("add-task");
+  const emptyWorklog = byId("empty-worklog");
   const statuses = new Map([
+    ["active", ["未完成", "list"]],
     ["all", ["全部", "all"]],
     ["TODO", ["待开始", "todo"]],
     ["IN_PROGRESS", ["进行中", "play"]],
@@ -451,6 +586,36 @@
     ["DONE", ["已完成", "done"]],
     ["CANCELLED", ["已取消", "cancelled"]],
   ]);
+  const terminal = new Set(["DONE", "CANCELLED"]);
+  const closedProjects = new Set();
+  let allProjects = [];
+  let selectedProject = "";
+  let selectedStatus = dashboard ? "active" : "all";
+  let expandedTask = null;
+  let refreshInProgress = false;
+  let initializedData = false;
+
+  const projectTarget = (project) => dashboard ? { projectId: project.id } : {};
+  const taskTarget = (project, task) => ({ ...projectTarget(project), taskId: task.id });
+  const taskKey = (project, task) => project.id + "/" + task.id;
+  const visible = (task) => selectedStatus === "all" || task.status === selectedStatus
+    || (selectedStatus === "active" && !terminal.has(task.status));
+  const projectViewKey = (project) => project.state === "ready" ? project.id : "path:" + project.path;
+  const scopedProjects = () => allProjects.filter((project) => !selectedProject || projectViewKey(project) === selectedProject);
+
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  }
+
+  function openedLink(response) {
+    return !!response?.result && !response.result.isError;
+  }
+
+  if (dashboard) {
+    projectName.textContent = "项目总览";
+    projectName.hidden = false;
+  }
+
   const historyKinds = {
     PROGRESS: ["进展", "progress"],
     HANDOFF: ["交接", "handoff"],
@@ -478,10 +643,9 @@
   const initializeId = 1;
   let requestId = initializeId;
   const pendingTools = new Map();
-  let selectedStatus = "all";
   const post = (message) => host.postMessage({ jsonrpc: "2.0", ...message }, "*");
   const timeout = window.setTimeout(() => {
-    showUnavailable("尚未收到 workLog 数据。请尝试重新打开面板。");
+    showUnavailable({message: "尚未收到 workLog 数据。请尝试重新打开面板。"});
   }, 8000);
 
   function icon(name) {
@@ -511,13 +675,51 @@
     return record ? [formatTime(record.at), record.client].filter(Boolean).join(" · ") : "";
   }
 
-  function showUnavailable(message) {
-    tasksView.hidden = true;
-    tasks.replaceChildren();
-    projectName.hidden = true;
-    panelStatus.textContent = message;
-    panelStatus.hidden = false;
-    retryProject.hidden = false;
+
+  function element(tag, text = "", className = "") {
+    const node = document.createElement(tag);
+    node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+
+  function button(text, className = "text-button") {
+    const node = element("button", text, className);
+    node.type = "button";
+    return node;
+  }
+
+  function showGuide() {
+    if (emptyWorklog.hidden) emptyWorklog.querySelector(".guide-feedback")?.replaceChildren();
+    emptyWorklog.hidden = false;
+    if (emptyWorklog.childElementCount) return;
+    const introIcon = element("div", "", "guide-icon");
+    introIcon.setAttribute("aria-hidden", "true");
+    introIcon.append(icon("folder"));
+    const heading = element("h1", dashboard ? "添加第一个项目" : "当前聊天未找到 workLog 项目");
+    const instruction = element("p", dashboard
+      ? "在项目根目录打开 Codex 本地聊天，选中 "
+      : "在项目管理目录的 Codex 本地聊天中，选中 ",
+      "guide-instruction");
+    instruction.append(element("strong", "worklog Skill"), " 后发送提示词。");
+    const prompt = element("p", "请为本项目初始化worklog。", "guide-prompt");
+    const copy = button("复制启用提示词", "guide-copy");
+    copy.prepend(icon("copy"));
+    const feedback = element("p", "", "meta guide-feedback");
+    feedback.setAttribute("role", "status");
+    const next = dashboard
+      ? "启用后回到这里点「刷新」。"
+      : "启用后在该聊天打开项目侧栏，或点「重试读取任务」。";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(prompt.textContent);
+        feedback.textContent = "已复制。" + next;
+      } catch {
+        window.getSelection().selectAllChildren(prompt);
+        feedback.textContent = "已选中提示词，请手动复制。" + next;
+      }
+    });
+    emptyWorklog.append(introIcon, heading, instruction, prompt, copy, feedback);
   }
 
   function callHost(method, params, wait = 8000) {
@@ -538,7 +740,7 @@
   async function callTool(name, args, wait) {
     const response = await callHost("tools/call", { name, arguments: args }, wait);
     if (response?.result?.structuredContent) return response.result.structuredContent;
-    return { state: "unavailable", message: response ? "Codex 未能返回此项结果，请重试。" : "读取超时，请重试。" };
+    return { state: "unavailable", retryable: true, message: response ? "Codex 未能返回此项结果，请重试。" : "请求超时，请重试。" };
   }
 
   function originalLoader(original, request, emptyMessage) {
@@ -590,10 +792,10 @@
     return entry;
   }
 
-  function renderHistory(task, record) {
+  function renderHistory(project, task, record) {
     const entry = historyTemplate.content.firstElementChild.cloneNode(true);
     const details = entry.querySelector("details");
-    const [label, mark] = historyKinds[record.kind];
+    const [label, mark] = historyKinds[record.kind] || [record.kind, "file"];
     entry.querySelector(".history-icon").append(icon(mark));
     entry.querySelector(".history-caption").textContent = record.summary;
     entry.querySelector(".history-kind").textContent = label;
@@ -602,10 +804,12 @@
     time.textContent = formatTime(record.at);
     let source = record.client || (record.source === "change" ? "workLog CLI" : "任务记录");
     if (record.projectRecord) source = record.client ? record.client + " · 项目关联记录" : "项目关联记录";
-    entry.querySelector(".history-source").textContent = source;
+    const sourceNode = entry.querySelector(".history-source");
+    sourceNode.textContent = source;
+    if (record.sessionId) sourceNode.append(element("code", " · " + record.sessionId, "source-session"));
     entry.querySelector(".history-superseded").hidden = !record.superseded;
     const load = originalLoader(entry.querySelector(".original"), () => callTool("read_worklog_history", {
-      taskId: task.id, source: record.source, recordId: record.id,
+      ...taskTarget(project, task), source: record.source, recordId: record.id,
     }), "这条历史记录没有原文。");
     details.addEventListener("toggle", () => { if (details.open) void load(); });
     return entry;
@@ -617,7 +821,7 @@
     container.replaceChildren(fragment);
   }
 
-  function taskSectionsLoader(row, task) {
+  function taskSectionsLoader(row, project, task) {
     const state = row.querySelector(".details-state");
     const retry = row.querySelector(".details-retry");
     const sections = row.querySelector(".task-sections");
@@ -629,7 +833,7 @@
       state.hidden = false;
       state.textContent = "正在读取待办和历史…";
       retry.hidden = true;
-      const result = await callTool("read_worklog_task_sections", { taskId: task.id });
+      const result = await callTool("read_worklog_task_sections", taskTarget(project, task));
       loading = false;
       if (result?.state !== "ready" || !result.todos || !Array.isArray(result.history)) {
         state.textContent = result?.message || "无法读取待办和历史。";
@@ -645,7 +849,15 @@
       row.querySelector(".processed-section").hidden = processed.length === 0;
       renderItems(row.querySelector(".open-todos"), open, renderTodo);
       renderItems(row.querySelector(".processed-todos"), processed, renderTodo);
-      renderItems(row.querySelector(".history-entries"), result.history, (record) => renderHistory(task, record));
+      renderItems(row.querySelector(".history-entries"), result.history, (record) => renderHistory(project, task, record));
+      const sessions = result.sessions || [];
+      row.querySelector(".sessions-section").hidden = sessions.length === 0;
+      row.querySelector(".sessions-count").textContent = sessions.length + " 条";
+      renderItems(row.querySelector(".session-items"), sessions, (session) => {
+        const item = element("li", session.client + " · ");
+        item.append(element("code", session.sessionId, "source-session"));
+        return item;
+      });
       loaded = true;
       state.hidden = true;
       sections.hidden = false;
@@ -654,32 +866,91 @@
     return load;
   }
 
-  function renderTask(task, index) {
+
+  function renderTask(project, task, index) {
     const row = taskTemplate.content.firstElementChild.cloneNode(true);
     const find = (selector) => row.querySelector(selector);
     const toggle = find(".task-toggle");
-    const badge = find(".badge");
+    const status = find(".task-status");
     const [label, statusIcon] = statuses.get(task.status) || ["未知状态", "todo"];
+    const key = taskKey(project, task);
     row.dataset.status = task.status;
+    row.dataset.key = key;
     find(".task-title").textContent = task.title;
     find(".task-number").textContent = task.number;
-    badge.append(icon(statusIcon), label);
-
-    const progressMeta = find(".progress-meta");
-    const progressMetadata = metadata(task.progress);
-    find(".progress-value").textContent = task.progress?.summary || "暂无进展记录";
-    progressMeta.querySelector("span").textContent = progressMetadata;
-    progressMeta.hidden = !progressMetadata;
-    find(".next-value").textContent = task.nextStep || "暂无下一步";
+    status.append(icon(statusIcon));
+    status.disabled = !project.writable;
+    status.setAttribute("aria-label", task.number + " " + label + (project.writable ? "，切换状态" : ""));
+    status.title = label;
+    if (project.writable) {
+      status.append(element("span", "", "caret"));
+      status.addEventListener("click", () => openStatusMenu(project, task, status));
+    }
+    if (task.updatedAt && Number.isFinite(Date.parse(task.updatedAt))) {
+      const parts = Object.fromEntries(timeFormat.formatToParts(new Date(task.updatedAt))
+        .map(({type, value}) => [type, value]));
+      const time = find(".task-updated");
+      time.hidden = false;
+      time.dateTime = task.updatedAt;
+      time.title = formatTime(task.updatedAt);
+      find(".task-day").textContent = parts.month + "/" + parts.day;
+      find(".task-clock").textContent = " " + parts.hour + ":" + parts.minute;
+    }
 
     const detail = find(".task-detail");
-    const loadSections = taskSectionsLoader(row, task);
+    const loadSections = taskSectionsLoader(row, project, task);
     detail.id = "task-detail-" + index;
     toggle.setAttribute("aria-controls", detail.id);
+    const setOpen = (open) => {
+      detail.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+      if (open) void loadSections();
+    };
     toggle.addEventListener("click", () => {
-      detail.hidden = !detail.hidden;
-      toggle.setAttribute("aria-expanded", String(!detail.hidden));
-      if (!detail.hidden) void loadSections();
+      if (expandedTask === key) {
+        expandedTask = null;
+        setOpen(false);
+        return;
+      }
+      const previous = tasks.querySelector(".task-toggle[aria-expanded='true']");
+      if (previous) {
+        previous.setAttribute("aria-expanded", "false");
+        byId(previous.getAttribute("aria-controls")).hidden = true;
+      }
+      expandedTask = key;
+      setOpen(true);
+    });
+
+    const progressValue = find(".progress-value");
+    progressValue.textContent = task.progress?.summary || "暂无进展";
+    progressValue.toggleAttribute("data-empty", !task.progress);
+    const progressMeta = find(".progress-meta");
+    progressMeta.textContent = metadata(task.progress);
+    progressMeta.hidden = !progressMeta.textContent;
+    if (task.progress?.sessionId) progressMeta.title = "来源会话 " + task.progress.sessionId;
+    const next = terminal.has(task.status) ? null : task.nextStep;
+    find(".next").toggleAttribute("data-empty", !next);
+    find(".next-value").textContent = next || "暂无下一步";
+    const continueTask = find(".continue-task");
+    continueTask.hidden = terminal.has(task.status);
+    continueTask.setAttribute("aria-label", "继续任务 " + task.number);
+    continueTask.title = "继续任务 " + task.number;
+    const continueFeedback = find(".continue-feedback");
+    continueTask.addEventListener("click", async () => {
+      continueTask.disabled = true;
+      continueFeedback.hidden = true;
+      const result = await callTool("prepare_worklog_continue", taskTarget(project, task));
+      if (result?.state === "ready" && typeof result.url === "string" && result.url.startsWith("codex://threads/new?")) {
+        const response = await callHost("ui/open-link", {url: result.url});
+        if (!openedLink(response)) {
+          continueFeedback.textContent = "Codex 未能打开新聊天。请重新读取任务后重试。";
+          continueFeedback.hidden = false;
+        }
+      } else {
+        continueFeedback.textContent = result?.message || "无法准备新聊天，请重试。";
+        continueFeedback.hidden = false;
+      }
+      continueTask.disabled = false;
     });
 
     const handoffEntry = task.handoff;
@@ -687,105 +958,556 @@
     const handoffMetadata = metadata(handoffEntry);
     find(".handoff-meta").textContent = handoffMetadata;
     find(".handoff-meta").hidden = !handoffMetadata;
-    find(".handoff-summary").textContent = handoffEntry
-      ? handoffEntry.summary || "暂无交接摘要"
-      : "暂无交接记录";
+    if (handoffEntry?.sessionId) find(".handoff-meta").title = "来源会话 " + handoffEntry.sessionId;
+    find(".handoff-summary").textContent = handoffEntry ? handoffEntry.summary || "暂无交接摘要" : "暂无交接记录";
     originalToggle.hidden = !handoffEntry;
-    if (!handoffEntry) return row;
-
-    const original = find(".original");
-    original.id = "original-" + index;
-    originalToggle.setAttribute("aria-controls", original.id);
-    const loadOriginal = originalLoader(original, () =>
-      callTool("read_worklog_codex_handoff", { taskId: task.id, entryId: handoffEntry.id }),
-      "这条交接没有记录原文。"
-    );
-    originalToggle.addEventListener("click", () => {
-      original.hidden = !original.hidden;
-      originalToggle.setAttribute("aria-expanded", String(!original.hidden));
-      originalToggle.querySelector("span").textContent = original.hidden ? "查看交接原文" : "收起交接原文";
-      if (!original.hidden) void loadOriginal();
-    });
+    if (handoffEntry) {
+      const original = find(".handoff .original");
+      original.id = "handoff-original-" + index;
+      originalToggle.setAttribute("aria-controls", original.id);
+      const loadOriginal = originalLoader(original, () =>
+        callTool("read_worklog_codex_handoff", { ...taskTarget(project, task), entryId: handoffEntry.id }),
+        "这条交接没有记录原文。");
+      originalToggle.addEventListener("click", () => {
+        original.hidden = !original.hidden;
+        originalToggle.setAttribute("aria-expanded", String(!original.hidden));
+        const action = original.hidden ? "查看交接原文" : "收起交接原文";
+        originalToggle.setAttribute("aria-label", action);
+        originalToggle.title = action;
+        if (!original.hidden) void loadOriginal();
+      });
+    }
+    setOpen(expandedTask === key);
     return row;
   }
 
-  function isReadyProject(result) {
-    return result?.state === "ready" && typeof result.projectName === "string" && Array.isArray(result.tasks);
+  function renderList() {
+    closeStatusMenu();
+    const scopes = scopedProjects();
+    const available = scopes.flatMap((project) => project.tasks || []);
+    const counts = new Map([["all", available.length], ["active", 0]]);
+    for (const task of available) {
+      counts.set(task.status, (counts.get(task.status) || 0) + 1);
+      if (!terminal.has(task.status)) counts.set("active", counts.get("active") + 1);
+    }
+    if (!scopes.some((project) => project.tasks?.some((task) => visible(task) && taskKey(project, task) === expandedTask))) {
+      expandedTask = null;
+    }
+    filters.replaceChildren();
+    for (const [key, [label, statusIcon]] of statuses) {
+      if (!dashboard && key === "active") continue;
+      const filter = button("", "filter");
+      filter.dataset.status = key;
+      filter.setAttribute("aria-pressed", String(key === selectedStatus));
+      filter.setAttribute("aria-controls", "tasks");
+      filter.append(icon(statusIcon), label, element("span", String(counts.get(key) || 0), "count"));
+      filter.addEventListener("click", () => {
+        selectedStatus = key;
+        renderList();
+        focusFilter();
+      });
+      filters.append(filter);
+    }
+
+    tasks.replaceChildren();
+    const idLength = available.reduce((longest, task) => Math.max(longest, task.number.length), 0);
+    tasks.style.setProperty("--task-number-width", idLength * 7 + "px");
+    let index = 0;
+    function group(status, project, list) {
+      const name = dashboard ? projectLabel(project) : statuses.get(status)[0];
+      const key = projectViewKey(project);
+      const mark = dashboard ? "folder" : statuses.get(status)[1];
+      const wrapper = element(dashboard ? "details" : "section", "", "group");
+      const heading = element(dashboard ? "summary" : "h2", "", "group-heading");
+      if (dashboard) heading.append(chevron());
+      else wrapper.dataset.status = status;
+      heading.append(icon(mark), element("span", name), element("span", list.length + (dashboard ? "" : " 项"), "count"));
+      wrapper.append(heading);
+      if (dashboard) {
+        wrapper.open = !closedProjects.has(key);
+        wrapper.addEventListener("toggle", () => {
+          if (!wrapper.isConnected) return;
+          if (wrapper.open) closedProjects.delete(key);
+          else closedProjects.add(key);
+        });
+      }
+      const rows = element("div", "", "task-rows");
+      if (project.state !== "ready") rows.append(element("p", project.message || "无法读取此项目。请检查登记后刷新。", "group-note empty"));
+      else if (list.length === 0) rows.append(element("p",
+        project.tasks.length ? "该筛选范围内暂无任务。" : "此项目还没有任务。", "group-note empty"));
+      else for (const task of list) rows.append(renderTask(project, task, index++));
+      wrapper.append(rows);
+      return wrapper;
+    }
+    if (dashboard) {
+      for (const project of scopes) {
+        tasks.append(group(null, project, (project.tasks || []).filter(visible)));
+      }
+    } else {
+      const project = scopes[0];
+      for (const key of ["IN_PROGRESS", "BLOCKED", "TODO", "PAUSED", "DONE", "CANCELLED"]) {
+        const list = available.filter((task) => task.status === key && visible(task));
+        if (list.length) tasks.append(group(key, project, list));
+      }
+    }
+    const visibleCount = counts.get(selectedStatus) || 0;
+    const hasReadableProjects = scopes.some((project) => project.state === "ready");
+    const filterEmpty = hasReadableProjects && visibleCount === 0 && available.length > 0;
+    tasksEmpty.hidden = !filterEmpty && (dashboard || available.length > 0);
+    byId("empty-tasks-message").textContent = filterEmpty ? "当前筛选下暂无任务。" : "此项目还没有任务。";
+    byId("show-all").hidden = !filterEmpty || selectedStatus === "all";
+    addTask.disabled = !allProjects.some((project) => project.writable);
   }
 
-  function renderProject(project) {
-    projectName.textContent = project.projectName;
-    projectName.hidden = false;
-    const rows = document.createDocumentFragment();
-    project.tasks.forEach((task, index) => rows.append(renderTask(task, index)));
-    tasks.replaceChildren(rows);
+  function chevron() {
+    const mark = icon("chevron");
+    mark.classList.add("icon-chevron");
+    return mark;
+  }
 
-    const counts = new Map([["all", project.tasks.length]]);
-    for (const task of project.tasks) {
-      counts.set(task.status, (counts.get(task.status) || 0) + 1);
-    }
-    const maxCount = Math.max(1, ...Array.from(statuses.keys())
-      .filter((key) => key !== "all")
-      .map((key) => counts.get(key) || 0));
+  function focusFilter() {
+    filters.querySelector('[aria-pressed="true"]')?.focus();
+  }
 
-    filters.replaceChildren();
-    function selectFilter(key) {
-      selectedStatus = key;
-      for (const filter of filters.children) {
-        filter.setAttribute("aria-pressed", String(filter.dataset.status === key));
-      }
-      for (const row of tasks.children) {
-        row.hidden = key !== "all" && row.dataset.status !== key;
-      }
-      const count = counts.get(key) || 0;
-      visibleCount.textContent = statuses.get(key)[0] + " · " + count + " 项任务";
-      tasksEmpty.hidden = count > 0;
-      tasksEmpty.textContent = key === "all" ? "此项目还没有任务。" : "该状态下暂无任务。";
+  function showUnavailable(result) {
+    tasksView.hidden = true;
+    if (!dashboard) projectName.hidden = true;
+    retryProject.hidden = dashboard;
+    if (!dashboard && result?.code === "not_initialized") {
+      panelStatus.hidden = true;
+      showGuide();
+      return;
     }
+    emptyWorklog.hidden = true;
+    panelStatus.textContent = result?.message || "无法读取 workLog 任务，请重试。";
+    panelStatus.hidden = false;
+  }
 
-    for (const [key, [label, statusIcon]] of statuses) {
-      const button = document.createElement("button");
-      const track = document.createElement("span");
-      const bar = document.createElement("span");
-      const caption = document.createElement("span");
-      button.type = "button";
-      button.className = "filter";
-      button.dataset.status = key;
-      track.className = "filter-track";
-      track.setAttribute("aria-hidden", "true");
-      bar.className = "filter-bar";
-      const count = counts.get(key) || 0;
-      const barHeight = key === "all" ? 0 : Math.round(11 * count / maxCount);
-      bar.style.setProperty("--bar-height", barHeight + "px");
-      track.append(bar);
-      caption.className = "filter-label";
-      caption.append(icon(statusIcon), label + " " + count);
-      button.append(track, caption);
-      button.addEventListener("click", () => selectFilter(key));
-      filters.append(button);
+  function projectLabel(project) {
+    const name = project.projectName || project.path;
+    const sharedName = allProjects.some((other) => other !== project && (other.projectName || other.path) === name);
+    return dashboard && sharedName ? name + " · " + project.path : name;
+  }
+
+  function projectOptions(select, projects, placeholder, selected = "") {
+    const list = [new Option(placeholder, "")];
+    for (const project of projects) list.push(new Option(projectLabel(project), projectViewKey(project)));
+    select.replaceChildren(...list);
+    select.value = selected;
+  }
+
+  function acceptView(result) {
+    window.clearTimeout(timeout);
+    initializedData = true;
+    if (result?.state !== "ready") {
+      showUnavailable(result);
+      return false;
     }
-    selectFilter(selectedStatus);
+    if (dashboard ? !Array.isArray(result.projects) : !Array.isArray(result.tasks)) {
+      showUnavailable({message: "Codex 返回的任务数据格式不正确。请尝试重新打开面板。"});
+      return false;
+    }
+    allProjects = dashboard ? result.projects : [result];
     panelStatus.hidden = true;
     retryProject.hidden = true;
+    if (allProjects.length === 0) {
+      tasksView.hidden = true;
+      showGuide();
+      return true;
+    }
+    emptyWorklog.hidden = true;
+    if (dashboard) {
+      if (!allProjects.some((project) => projectViewKey(project) === selectedProject)) selectedProject = "";
+      projectOptions(projectFilter, allProjects, "全部项目", selectedProject);
+    } else {
+      projectName.textContent = result.projectName;
+      projectName.hidden = false;
+    }
     tasksView.hidden = false;
+    renderList();
+    return true;
   }
 
-  async function refreshProject() {
+  async function refreshProject(feedback = "已刷新任务。") {
+    if (refreshInProgress) return false;
+    const fromGuide = !emptyWorklog.hidden;
+    refreshInProgress = true;
     refresh.disabled = true;
     retryProject.disabled = true;
-    const status = tasksView.hidden ? panelStatus : refreshStatus;
-    status.hidden = false;
-    status.textContent = "正在刷新任务…";
-    const result = await callTool("open_worklog_codex_panel", {});
+    if (tasksView.hidden) panelStatus.hidden = true;
+    refreshStatus.textContent = "正在刷新任务…";
+    const result = await callTool(openTool, {});
+    const ok = acceptView(result);
+    refreshInProgress = false;
     refresh.disabled = false;
     retryProject.disabled = false;
-    refreshStatus.hidden = true;
-    if (isReadyProject(result)) renderProject(result);
-    else showUnavailable(result?.message || "无法刷新任务，请重试。");
+    if (feedback === "已刷新任务。") {
+      if (!ok || allProjects.length === 0) feedback = "";
+      else if (fromGuide && allProjects.length === 1) feedback = "读取到「" + projectLabel(allProjects[0]) + "」。";
+    }
+    refreshStatus.textContent = feedback;
+    return ok;
   }
 
-  refresh.addEventListener("click", refreshProject);
-  retryProject.addEventListener("click", refreshProject);
+  refresh.addEventListener("click", () => { void refreshProject(); });
+  retryProject.addEventListener("click", async () => {
+    if (await refreshProject() && !projectName.hidden) projectName.focus();
+  });
+  projectFilter.addEventListener("change", () => {
+    selectedProject = projectFilter.value;
+    renderList();
+  });
+  byId("show-all").addEventListener("click", () => {
+    selectedStatus = "all";
+    renderList();
+    focusFilter();
+  });
+
+  const actions = {
+    start: ["开始", "task-start"],
+    pause: ["暂停", "task-pause"],
+    resume: ["恢复", "task-resume"],
+    complete: ["完成", "task-complete"],
+    cancel: ["取消任务", "task-cancel"],
+    reopen: ["重新打开", "task-reopen"],
+  };
+  const allowed = {
+    TODO: ["start", "complete", "cancel"],
+    IN_PROGRESS: ["pause", "complete", "cancel"],
+    PAUSED: ["resume", "complete", "cancel"],
+    DONE: ["reopen"],
+    CANCELLED: ["reopen"],
+  };
+  const menu = byId("status-menu");
+  const dialog = byId("task-dialog");
+  const dialogFields = byId("dialog-fields");
+  const form = byId("task-form");
+  const submitButton = byId("dialog-submit");
+  const closeButton = byId("dialog-close");
+  const dialogError = byId("dialog-error");
+  let menuTrigger;
+  let confirmAction;
+  let pendingWrite;
+  let isWriting = false;
+
+  function dismissWhenOutside(event) {
+    if (menuTrigger && !menu.contains(event.target) && !menuTrigger.contains(event.target)) closeStatusMenu();
+  }
+  document.addEventListener("pointerdown", dismissWhenOutside);
+  document.addEventListener("focusin", dismissWhenOutside);
+  window.addEventListener("resize", closeStatusMenu);
+  menu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const trigger = menuTrigger;
+      closeStatusMenu();
+      trigger?.focus();
+      event.preventDefault();
+      return;
+    }
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const choices = [...menu.querySelectorAll("button")];
+    const current = choices.indexOf(document.activeElement);
+    const step = event.key === "ArrowUp" ? -1 : 1;
+    const index = event.key === "Home" ? 0 : event.key === "End" ? choices.length - 1
+      : (current + step + choices.length) % choices.length;
+    choices[index]?.focus();
+  });
+
+  function closeStatusMenu() {
+    if (menu.matches(":popover-open")) menu.hidePopover();
+    menuTrigger?.setAttribute("aria-expanded", "false");
+    menuTrigger = undefined;
+  }
+
+  function openStatusMenu(project, task, trigger) {
+    if (isWriting || refreshInProgress) return;
+    const wasOpen = menuTrigger === trigger && menu.matches(":popover-open");
+    closeStatusMenu();
+    if (wasOpen) return;
+    const choices = allowed[task.lifecycle] || [];
+    if (!choices.length) return;
+    menu.replaceChildren();
+    for (const action of choices) {
+      const item = button(actions[action][0], "");
+      item.dataset.action = action;
+      item.addEventListener("click", () => {
+        closeStatusMenu();
+        trigger.focus();
+        if (action === "complete") void openCompletion(project, task);
+        else if (action === "cancel" || action === "reopen") openReason(project, task, action);
+        else void mutate(project, task, actions[action][1], {});
+      });
+      menu.append(item);
+    }
+    menuTrigger = trigger;
+    trigger.setAttribute("aria-expanded", "true");
+    const anchor = trigger.getBoundingClientRect();
+    menu.showPopover();
+    const margin = 6;
+    const x = Math.min(anchor.left, window.innerWidth - menu.offsetWidth - margin);
+    const y = anchor.bottom + menu.offsetHeight + margin > window.innerHeight
+      ? Math.max(margin, anchor.top - menu.offsetHeight - 3) : anchor.bottom + 3;
+    menu.style.left = Math.max(margin, x) + "px";
+    menu.style.top = y + "px";
+    menu.querySelector("button")?.focus();
+  }
+
+  function resetDialog(title, submission, target = "") {
+    confirmAction = undefined;
+    pendingWrite = undefined;
+    dialogFields.replaceChildren();
+    dialogError.textContent = "";
+    byId("dialog-heading").textContent = title;
+    byId("dialog-target").textContent = target;
+    submitButton.textContent = submission;
+    submitButton.disabled = false;
+    closeButton.disabled = false;
+    dialog.showModal();
+  }
+
+  function labeled(label, control) {
+    const field = element("label", label);
+    field.append(control);
+    return field;
+  }
+
+  function addDialog() {
+    if (isWriting || refreshInProgress) return;
+    const writable = allProjects.filter((project) => project.writable);
+    if (!writable.length) return;
+    resetDialog("添加任务", "添加");
+    const select = element("select");
+    if (dashboard) {
+      const preselected = writable.some((project) => projectViewKey(project) === selectedProject) ? selectedProject : "";
+      projectOptions(select, writable, "请选择项目", preselected);
+      dialogFields.append(labeled("所属项目", select));
+    }
+    const title = element("input");
+    title.type = "text";
+    dialogFields.append(labeled("任务标题", title));
+    (dashboard && !select.value ? select : title).focus();
+    confirmAction = () => {
+      const project = dashboard ? writable.find((item) => projectViewKey(item) === select.value) : writable[0];
+      if (!project) return invalid("请选择所属项目。", select);
+      const value = title.value.trim();
+      if (!value) return invalid("请填写任务标题。", title);
+      return mutate(project, null, "task-create", {title: value});
+    };
+  }
+
+  function taskLabel(project, task) {
+    return projectLabel(project) + " · " + task.number + " " + task.title;
+  }
+
+  function openReason(project, task, action) {
+    const [label, command] = actions[action];
+    resetDialog(label, action === "cancel" ? "确认取消任务" : "确认重新打开", taskLabel(project, task));
+    const input = element("textarea");
+    input.rows = 3;
+    dialogFields.append(labeled("原因", input));
+    input.focus();
+    confirmAction = () => {
+      const reason = input.value.trim();
+      if (!reason) return invalid("请填写原因。", input);
+      return mutate(project, task, command, {reason});
+    };
+  }
+
+  async function openCompletion(project, task) {
+    resetDialog("完成任务", "确认完成", taskLabel(project, task));
+    submitButton.disabled = true;
+    const loading = element("p", "正在读取完成依据和待办…", "meta");
+    dialogFields.append(loading);
+    closeButton.focus();
+    const result = await callTool("read_worklog_completion_options", {
+      ...taskTarget(project, task), expectedRevision: task.revision,
+    });
+    if (!dialog.open || !loading.isConnected) return;
+    if (result.state !== "ready") {
+      if (result.retryable) {
+        const retry = button("重试读取完成依据");
+        retry.addEventListener("click", () => {
+          dialog.close();
+          void openCompletion(project, task);
+        });
+        loading.replaceChildren(retry);
+        dialogError.textContent = result.message;
+        retry.focus();
+      } else {
+        dialog.close();
+        await refreshProject(result.message);
+        focusAfterWrite(project, task.id);
+      }
+      return;
+    }
+    loading.remove();
+    const scope = element("textarea");
+    scope.rows = 2;
+    scope.value = result.completedScope;
+    const evidence = element("select");
+    if (!result.evidence.length) evidence.add(new Option("暂无符合规则的已保存进展或交接", ""));
+    for (const [index, record] of result.evidence.entries()) {
+      const caption = [record.label, record.summary, metadata(record)].filter(Boolean).join(" · ");
+      evidence.add(new Option(caption, String(index)));
+    }
+    dialogFields.append(labeled("完成范围", scope), labeled("完成依据", evidence));
+    const inputs = new Map();
+    if (result.todos.length) {
+      const todos = element("fieldset", "", "modal-todos");
+      todos.append(element("legend", "开放待办及处置"));
+      for (const todo of result.todos) {
+        const input = element("textarea");
+        input.rows = 2;
+        todos.append(labeled(todo.summary, input));
+        inputs.set(todo.id, input);
+      }
+      if (inputs.size > 1) {
+        const fill = button("将首条说明填入其他空项");
+        fill.addEventListener("click", () => {
+          const [first, ...rest] = inputs.values();
+          const description = first.value.trim();
+          if (description) for (const field of rest) {
+            if (!field.value.trim()) field.value = description;
+          }
+        });
+        todos.append(fill);
+      }
+      dialogFields.append(todos);
+    }
+    if (result.blockers.length) {
+      dialogError.textContent = "未解除的任务级阻塞：" + result.blockers.map((item) => item.summary).join("、");
+    } else if (!result.evidence.length) {
+      dialogError.textContent = "请先保存至少一条符合完成规则的进展或交接。";
+    } else {
+      submitButton.disabled = false;
+    }
+    scope.focus();
+    confirmAction = () => {
+      const completedScope = scope.value.trim();
+      if (!completedScope) return invalid("请填写完成范围。", scope);
+      const record = evidence.value !== "" && result.evidence[Number(evidence.value)];
+      if (!record) return invalid("请选择有效的完成依据。", evidence);
+      const dispositions = {};
+      for (const [id, input] of inputs) {
+        const text = input.value.trim();
+        if (!text) return invalid("请填写每条开放待办的处置说明。", input);
+        dispositions[id] = text;
+      }
+      return mutate(project, task, "task-complete", {
+        completed_scope: completedScope, evidence: [record.ref], todo_dispositions: dispositions,
+      });
+    };
+  }
+
+  function invalid(message, control) {
+    dialogError.textContent = message;
+    control.focus();
+  }
+
+  function operationId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, (n) => n.toString(16).padStart(2, "0")).join("");
+    return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
+  }
+
+  function mutate(project, task, command, fields) {
+    const request = {
+      operation_id: operationId(),
+      project_id: project.id,
+      data_generation: project.generation,
+      ...fields,
+    };
+    if (task) {
+      request.task_id = task.id;
+      request.expected_revision = task.revision;
+    }
+    return sendWrite({project, task, command, request});
+  }
+
+  function focusAfterWrite(project, id) {
+    const row = tasks.querySelector('.task[data-key="' + CSS.escape(project.id + "/" + id) + '"]');
+    const status = row?.querySelector(".task-status");
+    if (status && !status.disabled && status.offsetParent) status.focus();
+    else if (tasksView.hidden) refresh.focus();
+    else focusFilter();
+  }
+
+  async function sendWrite(write) {
+    if (isWriting || refreshInProgress) return;
+    isWriting = true;
+    refresh.disabled = true;
+    const {project, task, command, request} = write;
+    if (dialog.open) {
+      submitButton.disabled = true;
+      closeButton.disabled = true;
+      dialogError.textContent = "";
+    } else {
+      refreshStatus.textContent = "正在保存任务…";
+    }
+    const result = await callTool("mutate_worklog_task", {...projectTarget(project), command, request}, 15000);
+    isWriting = false;
+    refresh.disabled = false;
+    if (result.state !== "ready" && result.retryable) {
+      if (dialog.open) {
+        pendingWrite = write;
+        dialogError.textContent = result.message;
+        for (const control of dialogFields.querySelectorAll("input, textarea, select, button")) control.disabled = true;
+        submitButton.disabled = false;
+        submitButton.textContent = "重试原请求";
+        closeButton.disabled = false;
+        submitButton.focus();
+      } else {
+        refreshStatus.textContent = result.message + " ";
+        const retry = button("重试原请求");
+        retry.addEventListener("click", () => { void sendWrite(write); });
+        refreshStatus.append(retry);
+        retry.focus();
+      }
+      return;
+    }
+    pendingWrite = undefined;
+    if (dialog.open) dialog.close();
+    const newTask = result.task;
+    if (result.state === "ready" && command === "task-create" && newTask) {
+      if (!["all", "active", "TODO"].includes(selectedStatus)) selectedStatus = dashboard ? "active" : "TODO";
+      if (selectedProject) selectedProject = projectViewKey(project);
+      closedProjects.delete(projectViewKey(project));
+    }
+    const feedback = result.state === "ready"
+      ? command === "task-create" && newTask ? "已添加 " + newTask.number + "。" : "已保存任务状态。"
+      : result.message || "任务写入失败。";
+    await refreshProject(feedback);
+    focusAfterWrite(project, newTask?.id || task?.id);
+  }
+
+  addTask.addEventListener("click", addDialog);
+  closeButton.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("cancel", (event) => {
+    if (isWriting) event.preventDefault();
+  });
+  dialog.addEventListener("close", () => {
+    if (dialog.open) return;
+    confirmAction = undefined;
+    if (!pendingWrite) return;
+    pendingWrite = undefined;
+    void refreshProject();
+  });
+  function submitDialog() {
+    if (isWriting || submitButton.disabled) return;
+    if (pendingWrite) void sendWrite(pendingWrite);
+    else void confirmAction?.();
+  }
+  submitButton.addEventListener("click", submitDialog);
+  form.addEventListener("submit", (event) => event.preventDefault());
+  form.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.isComposing && event.target === dialogFields.querySelector("input")) {
+      event.preventDefault();
+      submitDialog();
+    }
+  });
 
   function createUpdateRow(component, title) {
     const row = updateTemplate.content.firstElementChild.cloneNode(true);
@@ -819,7 +1541,7 @@
       find(".update-error").textContent = error || "";
       retry.hidden = !error;
       const releaseUrl = result?.release_url;
-      if (typeof releaseUrl === "string" && /^https:\/\/github\.com\/LaudasMe\/worklog\/releases\/tag\/[A-Za-z0-9.-]+$/i.test(releaseUrl)) {
+      if (typeof releaseUrl === "string" && /^https:\/\/github\.com\/(?:LaudasMe|floohubAI)\/worklog\/releases\/tag\/[A-Za-z0-9.-]+$/i.test(releaseUrl)) {
         link.href = releaseUrl;
         link.hidden = false;
       }
@@ -827,7 +1549,7 @@
     link.addEventListener("click", async (event) => {
       event.preventDefault();
       const response = await callHost("ui/open-link", { url: link.href });
-      if (!response?.result || response.result.isError) {
+      if (!openedLink(response)) {
         address.textContent = "Codex 无法直接打开此链接。可复制地址 " + link.href;
         address.hidden = false;
       }
@@ -848,6 +1570,7 @@
     checkUpdates.disabled = false;
   });
 
+
   window.addEventListener("message", (event) => {
     const message = event.data;
     if (event.source !== host || message?.jsonrpc !== "2.0") return;
@@ -855,10 +1578,12 @@
     if (message.id === initializeId && !message.method) {
       if (message.result) {
         post({ method: "ui/notifications/initialized" });
+        refresh.disabled = false;
         checkUpdates.disabled = false;
+        applyTheme(message.result.hostContext?.theme);
       } else if (message.error) {
         window.clearTimeout(timeout);
-        showUnavailable("无法连接 Codex 面板。请尝试重新打开面板。");
+        showUnavailable({message: "无法连接 Codex 面板。请尝试重新打开面板。"});
       }
       return;
     }
@@ -870,12 +1595,12 @@
 
     if (message.method === "ui/notifications/tool-result") {
       window.clearTimeout(timeout);
-      const result = message.params?.structuredContent;
-      if (isReadyProject(result)) {
-        renderProject(result);
-      } else {
-        showUnavailable(result?.message || "无法读取 workLog 任务。请尝试重新打开面板。");
-      }
+      if (!refreshInProgress && !initializedData) acceptView(message.params?.structuredContent);
+      return;
+    }
+
+    if (message.method === "ui/notifications/host-context-changed") {
+      applyTheme(message.params?.theme);
       return;
     }
 
@@ -890,7 +1615,7 @@
     id: initializeId,
     method: "ui/initialize",
     params: {
-      appInfo: { name: "worklog-codex-panel", version: "0.1.0" },
+      appInfo: { name: "worklog-codex-panel", version: "1.0.0" },
       appCapabilities: {},
       protocolVersion: "2026-01-26",
     },

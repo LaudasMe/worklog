@@ -119,28 +119,30 @@ import os
 from pathlib import Path
 import sys
 
-base = "https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/"
 url = next(arg for arg in sys.argv[1:] if arg.startswith("https://"))
-assert url.startswith(base), url
-asset_name = url[len(base):]
+base, asset_name = url.rsplit("/", 1)
+assert base in {
+    "https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0",
+    "https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0",
+}, url
 asset = {
     "install-codex.sh": os.environ["WORKLOG_TEST_LAUNCHER"],
     "worklog-codex-gui-v0.1.0-full.zip": os.environ["WORKLOG_TEST_ARCHIVE"],
 }[asset_name]
-if asset_name == "install-codex.sh":
-    assert "-o" not in sys.argv and "--output" not in sys.argv
-    sys.stdout.buffer.write(Path(asset).read_bytes())
-else:
-    target = Path(sys.argv[sys.argv.index("--output") + 1])
-    target.write_bytes(Path(asset).read_bytes())
+target = Path(sys.argv[sys.argv.index("--output") + 1])
+target.write_bytes(Path(asset).read_bytes())
 with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as log:
     print(asset_name, file=log)
 """,
             encoding="utf-8",
         )
         curl.chmod(0o755)
-        command = next(line for line in (REPO / "README.md").read_text(encoding="utf-8").splitlines()
-                       if line.startswith('(worklog_installer='))
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        launcher_url = next(
+            line.strip() for line in readme.splitlines()
+            if line.startswith("https://github.com/")
+            and line.endswith("/gui-codex-v0.1.0/install-codex.sh")
+        )
         download_log = self.fixture / "download-paths.txt"
         download_log.write_text("", encoding="utf-8")
         env = {
@@ -151,10 +153,16 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
             "WORKLOG_TEST_ARCHIVE": str(archive or self.package),
             "WORKLOG_TEST_DOWNLOADS": str(download_log),
         }
-        result = subprocess.run(
-            ["/bin/bash", "-c", command], input=choice, cwd=self.fixture,
-            env=env, capture_output=True, text=True, timeout=45,
-        )
+        with TemporaryDirectory(dir=temporary_downloads) as staged:
+            launcher_path = Path(staged) / self.launcher.name
+            subprocess.run(
+                ["curl", "-fsSL", launcher_url, "--output", str(launcher_path)],
+                cwd=self.fixture, env=env, check=True, capture_output=True, timeout=45,
+            )
+            result = subprocess.run(
+                ["/bin/bash", str(launcher_path)], input=choice, cwd=self.fixture,
+                env=env, capture_output=True, text=True, timeout=45,
+            )
         downloaded = download_log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(downloaded, [self.launcher.name, self.package.name], result.stderr or result.stdout)
         self.assertEqual(list(temporary_downloads.glob("worklog-codex-install.*")), [])

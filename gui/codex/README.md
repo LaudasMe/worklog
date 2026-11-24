@@ -23,13 +23,11 @@ python3 -B gui/codex/build_local.py --release-assets --output-dir dist/gui-codex
 ## 验证
 
 ```sh
-python3 -B gui/codex/test_project_panel.py
-python3 -B gui/codex/test_codex_skill_version.py
-python3 -B gui/codex/test_install.py
+python3 -B -m unittest discover -s gui/codex -q
 python3 -B -m unittest discover -s tests -q
 ```
 
-安装测试覆盖整套替换、恢复以及校验失败，并在能够定位到真实 Codex CLI 时复跑独立安装。测试中的 Codex 配置和 Skill 目录均指向临时用户目录。
+GUI 回归覆盖 Dashboard 和项目侧栏的跨项目读取、任务写入与继续任务草稿参数。安装测试覆盖整套替换、恢复以及校验失败，并在能够定位到真实 Codex CLI 时复跑独立安装。测试中的 Codex 配置和 Skill 目录均指向临时用户目录。
 
 插件使用 Codex 本地兼容格式。安装器生成 MCP 配置时省略 `cwd`，侧栏由当前聊天对应的工作目录启动。项目定位会查找最近的 workLog 数据根，对已登记的项目核对数据库身份，且遇到当前 Git 仓库或 worktree 的根目录时停止向上查找。代码仓和项目管理目录分开的情况，请从项目管理目录新建本地聊天。
 
