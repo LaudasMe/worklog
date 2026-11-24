@@ -6,6 +6,7 @@ from io import StringIO
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -120,11 +121,14 @@ from pathlib import Path
 import sys
 
 url = next(arg for arg in sys.argv[1:] if arg.startswith("https://"))
-base, asset_name = url.rsplit("/", 1)
-assert base in {
-    "https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0",
-    "https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0",
-}, url
+if url == os.environ["WORKLOG_TEST_README_LAUNCHER_URL"]:
+    asset_name = "install-codex.sh"
+else:
+    base, asset_name = url.rsplit("/", 1)
+    assert base in {
+        "https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0",
+        "https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0",
+    } and asset_name == "worklog-codex-gui-v0.1.0-full.zip", url
 asset = {
     "install-codex.sh": os.environ["WORKLOG_TEST_LAUNCHER"],
     "worklog-codex-gui-v0.1.0-full.zip": os.environ["WORKLOG_TEST_ARCHIVE"],
@@ -138,10 +142,14 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
         )
         curl.chmod(0o755)
         readme = (REPO / "README.md").read_text(encoding="utf-8")
+        # README 跟随正式发布，测试安装包由当前源码生成。
+        launcher_pattern = re.compile(
+            r"https://github\.com/floohubAI/worklog/releases/download/"
+            r"gui-codex-v[0-9]+\.[0-9]+\.[0-9]+/install-codex\.sh"
+        )
         launcher_url = next(
-            line.strip() for line in readme.splitlines()
-            if line.startswith("https://github.com/")
-            and line.endswith("/gui-codex-v0.1.0/install-codex.sh")
+            line for line in map(str.strip, readme.splitlines())
+            if launcher_pattern.fullmatch(line)
         )
         download_log = self.fixture / "download-paths.txt"
         download_log.write_text("", encoding="utf-8")
@@ -150,6 +158,7 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
             "PATH": f"{mock_bin}{os.pathsep}{os.environ.get('PATH', os.defpath)}",
             "TMPDIR": str(temporary_downloads),
             "WORKLOG_TEST_LAUNCHER": str(self.launcher),
+            "WORKLOG_TEST_README_LAUNCHER_URL": launcher_url,
             "WORKLOG_TEST_ARCHIVE": str(archive or self.package),
             "WORKLOG_TEST_DOWNLOADS": str(download_log),
         }

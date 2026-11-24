@@ -27,16 +27,16 @@ https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 
 ### GUI 版（Codex 桌面端）
 
-适用于装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac。GUI 版随包提供 CLI 和 Skill，并在 Codex 聊天旁增加只读任务面板。
+适用于装有支持本地插件的 Codex 桌面端和 Python 3.9 或更新版本的 Mac。GUI 版随包提供 CLI 和 Skill，并在 Codex 中提供 workLog Dashboard 和项目侧栏。
 把下列完整内容复制给你的Codex。
 
 
 ```text
 请在这台 Mac 上安装 workLog 的 Codex GUI 版。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果。
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh
 ```
 
-安装完成后重启 Codex。 [Codex GUI 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装](gui/codex/INSTALL.md)
+安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.1.1 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ## 三个使用场景
 
@@ -55,7 +55,7 @@ https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-
 ### 3. 查看任务
 
 - **CLI 版**。在聊天中说「用 workLog 查看 T001 的进展、未完成的待办和下一步。」还不知道任务编号时，可以先问「当前项目有哪些任务还没结束？」
-- **GUI 版**。先打开本地聊天的右边栏，然后选择「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。可以按状态筛选任务，点开任务查看待办和历史记录。 [打开侧栏](gui/codex/INSTALL.md#打开侧栏)
+- **GUI 版**。先打开本地聊天的右边栏，然后选择「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。可以按状态筛选任务，点开任务查看待办和历史记录。 [打开侧栏](docs/user-guide.md#3-在-codex-侧栏查看任务)
 
 <img src="docs/images/codex-task-panel.png" alt="Codex 侧栏显示核对订单金额任务的进展、待办和历史" width="452">
 

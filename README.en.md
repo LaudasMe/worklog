@@ -27,16 +27,16 @@ The installer verifies the release package and installs the CLI and Skill to `~/
 
 ### GUI edition (Codex desktop)
 
-Requires a Mac with a version of Codex desktop that supports local plugins and Python 3.9 or later. The GUI edition bundles the CLI and Skill and adds a read-only task panel beside your Codex chat.
+Requires a Mac with a version of Codex desktop that supports local plugins and Python 3.9 or later. The GUI edition bundles the CLI and Skill and provides the workLog Dashboard and a project task sidebar in Codex.
 
 Copy the entire block below into your Codex chat.
 
 ```text
 Please install the workLog Codex GUI on this Mac. Download the official installer below, run it with Bash, and tell me whether the installation succeeded.
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh
 ```
 
-Restart Codex when the installation finishes. [Codex GUI release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.0) · [Manual installation (Chinese)](gui/codex/INSTALL.md)
+Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.1.1 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ## Getting started
 
@@ -55,7 +55,7 @@ Start a chat from your project's root directory and load the `worklog` Skill. If
 ### 3. View a task
 
 - **CLI edition.** Say “Use workLog to show the progress, open to-dos, and next step for T001.” If you don't know the task ID yet, ask “Which tasks are still open in this project?”
-- **GUI edition.** In a local Codex chat, open the right sidebar and select **+ → More tools → Plugins and MCP → workLog 项目侧栏** (workLog Project Sidebar). Filter tasks by status and expand a task to see its to-dos and history. [Open the sidebar (Chinese)](gui/codex/INSTALL.md#打开侧栏)
+- **GUI edition.** In a local Codex chat, open the right sidebar and select **+ → More tools → Plugins and MCP → workLog 项目侧栏** (workLog Project Sidebar). Filter tasks by status and expand a task to see its to-dos and history. [Open the sidebar (Chinese)](docs/user-guide.md#3-在-codex-侧栏查看任务)
 
 <img src="docs/images/codex-task-panel.png" alt="Codex sidebar showing progress, to-dos, and history for the order verification task" width="452">
 

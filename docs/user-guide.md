@@ -2,19 +2,21 @@
 
 workLog 在项目里保存任务、待办、进展和交接记录。你可以在 Codex 记下做到哪里，再用 OpenCode 或另一个 Codex 聊天打开同一个项目，读回原文并继续工作。
 
-本指南适用于 **CLI／Skill v0.4.0** 和 **Codex 项目侧栏 v0.1.0**。
+本指南适用于 **CLI／Skill v0.4.0** 和 **Codex GUI 0.1.1**。
 
 ## 1. 安装
 
-### 在 macOS 上使用 Codex 侧栏
+### 在 macOS 上安装 Codex GUI
 
-准备支持本地插件的 Codex 桌面端和 Python 3.9 或以上版本。打开终端，执行下面的命令安装侧栏及随包的 CLI 和 Skill。
+准备支持本地插件的 Codex 桌面端和 Python 3.9 或以上版本。打开终端，执行下面的命令安装 Dashboard、项目侧栏及随包的 CLI 和 Skill。
 
 ```sh
-(worklog_installer="$(curl -fsSL https://github.com/LaudasMe/worklog/releases/download/gui-codex-v0.1.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
-脚本会下载并校验完整安装包。安装器提示是否替换旧版 Skill 或无法识别的 Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 发布页](https://github.com/LaudasMe/worklog/releases/tag/gui-codex-v0.1.0) · [手动安装和自定义 Codex 路径](../gui/codex/INSTALL.md)
+脚本会下载并校验完整安装包。安装器提示是否替换旧版 Skill 或无法识别的 Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 0.1.1 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1)
+
+也可下载[完整安装包](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/worklog-codex-gui-v0.1.1-full.zip)和 [SHA-256 校验文件](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/SHA256SUMS)，用 `shasum -a 256 -c SHA256SUMS --ignore-missing` 核对已下载的 ZIP。解压后在包目录运行 `python3 -B install.py`。需要指定 Codex CLI 时，可追加 `--codex /absolute/path/to/codex`。
 
 ### 在 OpenCode 或 Codex 中单独安装 Skill
 
@@ -61,7 +63,9 @@ SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 3. 在任务列表中按状态筛选，直接看「当前进展」和「下一步」。点任务标题，展开「上次交接」「待办」和「全部历史」。
 4. 点「查看交接原文」可以核对交接当时留下的内容和下一步。「全部历史」按时间倒序展示进展、交接、决策和状态变更，可展开单条原文。「待办」包含未完成事项和可展开的已处理事项。
 
-侧栏只读，支持 schema 4 的项目数据库。「全部」显示当前项目所有未归档任务。用聊天里的 Skill 保存进展或修改任务后，点侧栏的「刷新」查看新结果。 [侧栏安装与打开说明](../gui/codex/INSTALL.md)
+侧栏支持 schema 4 的项目数据库，可添加任务、切换状态和确认完成。「全部」显示当前项目所有未归档任务。用聊天里的 Skill 保存进展后，点侧栏的「刷新」查看新结果。
+
+从 Codex 主侧栏应用列表打开 **workLog Dashboard**，可查看已登记项目的任务，并按项目和状态筛选。 [Codex GUI 安装](#在-macos-上安装-codex-gui)
 
 ## 4. 管理任务状态、优先级和完成依据
 
