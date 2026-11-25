@@ -4,7 +4,9 @@ workLog Skill 安装包包含 Codex 与 OpenCode 共用的 `SKILL.md`、Python C
 
 ## 取得安装包
 
-从 workLog 仓库根目录构建到单独的目录。脚本输出安装包的绝对路径。已有基于当前源码构建的安装包时可以直接解压。
+正式安装包请从 [GitHub Releases](https://github.com/floohubAI/worklog/releases) 下载独立 Skill ZIP 和同一发布页的 `SHA256SUMS`。把两份文件放到同一目录，运行 `shasum -a 256 -c SHA256SUMS`，确认 ZIP 校验通过后再解压。
+
+也可以从 workLog 仓库根目录构建到单独的目录。脚本输出安装包的绝对路径。从源码准备独立发布附件时，在输出目录为生成的 ZIP 运行 `shasum -a 256 worklog-skill-v0.5.0.zip > SHA256SUMS`。
 
 ```sh
 PACKAGE_DIR="$(mktemp -d)"
@@ -16,7 +18,7 @@ python3 -B scripts/package_skill.py --output-dir "$PACKAGE_DIR"
 首次安装请选一个独立的 Git 项目根。把以下路径替换为实际绝对路径。两端从这个根目录或子目录启动新会话。ZIP 自带 `worklog/` 目录。
 
 ```sh
-SKILL_ZIP="/absolute/path/to/worklog-skill-v0.4.0.zip"
+SKILL_ZIP="/absolute/path/to/worklog-skill-v0.5.0.zip"
 PROJECT_ROOT="/absolute/path/to/project-root"
 SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 mkdir -p "$SKILLS_DIR"
@@ -25,7 +27,7 @@ test ! -e "$SKILLS_DIR/worklog" &&
   python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" release-version
 ```
 
-命令会先检查是否已有 workLog 安装。当前发布版本为 `v0.4.0`，CLI 的 `--version` 输出为 `workLog CLI protocol 2.0`。升级时先把新版本解压到临时目录，用解压后的 CLI 执行 `release-version` 核对发布版本和协议，再整体替换 `.agents/skills/worklog/` 并开启新会话。每个工作项目的 SQLite 数据位于自己的 `.worklog/`。两端的登记共用 `~/.local/share/worklog/projects.json`，两者均独立于 Skill 安装目录。移除 Skill 时只移除安装的 `.agents/skills/worklog/` 目录。
+命令会先检查是否已有 workLog 安装。当前发布版本为 `v0.5.0`，CLI 的 `--version` 输出为 `workLog CLI protocol 2.0`。升级时先把新版本解压到临时目录，用解压后的 CLI 执行 `release-version` 核对发布版本和协议，再整体替换 `.agents/skills/worklog/` 并开启新会话。每个工作项目的 SQLite 数据位于自己的 `.worklog/`。两端的登记共用 `~/.local/share/worklog/projects.json`，两者均独立于 Skill 安装目录。移除 Skill 时只移除安装的 `.agents/skills/worklog/` 目录。
 
 如要多项目共用，可用相同方法解压到 `~/.agents/skills/` 并开启新会话。项目和用户级目录只保留一个用于当前验收的 `worklog` 定义，便于核对实际加载版本。两个客户端仍通过你确认的项目路径定位数据。
 

@@ -22,27 +22,34 @@ PLUGIN_FILES = (
     "project_panel.py", "release-version.json", "server.py", "task_actions.py",
 )
 RUNTIME_FILES = (
-    "worklog_projects.py", "worklog_release.py",
+    "worklog_context.py", "worklog_projects.py", "worklog_release.py",
     "worklog_store.py", "worklog_summaries.py",
 )
 
 
-def build_full_package(output_dir, *, candidate_version=None):
+def build_full_package(output_dir, *, candidate_version=None, candidate_cli_version=None):
     plugin = EXAMPLE / "worklog-panel"
     version = json.loads((plugin / "release-version.json").read_text(encoding="utf-8"))
     plugin_manifest = json.loads((plugin / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
-    if f"gui-codex-v{plugin_manifest['version']}" != version["version"]:
+    gui_release = version["version"]
+    released_gui_version = plugin_manifest["version"]
+    if f"gui-codex-v{released_gui_version}" != gui_release:
         raise ValueError("插件版本与 Codex GUI 发布版本不一致。")
+    bundled_release = version["bundled_cli_version"]
+    if candidate_cli_version is not None and candidate_version is None:
+        raise ValueError("指定候选 CLI／Skill 时也需指定候选插件版本。")
     if candidate_version is not None:
         if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", candidate_version):
             raise ValueError("本机候选包需要 X.Y.Z 格式的插件版本。")
         plugin_manifest["version"] = candidate_version
         version["version"] = f"gui-codex-v{candidate_version}"
+        if candidate_cli_version is not None:
+            version["bundled_cli_version"] = candidate_cli_version
     archive_root = f"worklog-codex-gui-v{plugin_manifest['version']}"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{archive_root}-full.zip"
     with TemporaryDirectory(prefix=".worklog-codex-build-", dir=output_dir) as temporary:
-        package = build_package(Path(temporary))
+        package = build_package(Path(temporary), candidate_version=candidate_cli_version)
         if package.name != f"worklog-skill-{version['bundled_cli_version']}.zip":
             raise ValueError("随包 CLI／Skill 版本与 Codex GUI 发布清单不一致。")
         sources = {
@@ -55,14 +62,14 @@ def build_full_package(output_dir, *, candidate_version=None):
         sources.update({f"worklog-panel/runtime/{name}": REPO / name for name in RUNTIME_FILES})
         payload = {name: source.read_bytes() for name, source in sources.items()}
         if candidate_version is not None:
-            plugin_manifest["description"] = "在 Codex 中查看本机 workLog 总览和当前项目。"
-            plugin_manifest["interface"]["shortDescription"] = "在 Dashboard 和项目侧栏查看和管理任务。"
             for name, manifest in (
                 (".codex-plugin/plugin.json", plugin_manifest), ("release-version.json", version),
             ):
                 payload[f"worklog-panel/{name}"] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
             docs = payload["INSTALL.md"].decode()
-            docs = docs.replace("worklog-codex-gui-v0.1.0", archive_root).replace("gui-codex-v0.1.0", version["version"])
+            docs = docs.replace(f"worklog-codex-gui-v{released_gui_version}", archive_root)
+            docs = docs.replace(gui_release, version["version"])
+            docs = docs.replace(f"`{bundled_release}`", f"`{version['bundled_cli_version']}`")
             payload["INSTALL.md"] = ("# 本机 Dashboard 候选包\n\n"
                 "此包用于本机验收。安装后从 Codex 主侧栏应用列表打开或固定 workLog Dashboard。"
                 "聊天右侧可以继续使用 workLog 项目侧栏。\n\n" + docs).encode()
@@ -115,13 +122,17 @@ def main():
     variant = parser.add_mutually_exclusive_group()
     variant.add_argument("--candidate-version", help="指定本机候选包的插件版本（X.Y.Z）")
     variant.add_argument("--release-assets", action="store_true", help="同时生成下载脚本和 SHA-256 校验文件。")
+    parser.add_argument("--candidate-cli-version", help="随包的本机 CLI／Skill 候选版本（vX.Y.Z）")
     args = parser.parse_args()
+    if args.candidate_cli_version and not args.candidate_version:
+        parser.error("--candidate-cli-version 需要同时指定 --candidate-version")
     output_dir = args.output_dir.resolve()
     if args.release_assets:
         for asset in build_release_assets(output_dir):
             print(asset)
     else:
-        print(build_full_package(output_dir, candidate_version=args.candidate_version))
+        print(build_full_package(output_dir, candidate_version=args.candidate_version,
+                                 candidate_cli_version=args.candidate_cli_version))
 
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 {
   "name": "worklog-codex",
-  "version": "0.1.0",
-  "description": "在 Codex 聊天右侧查看当前 workLog 项目及版本更新。",
+  "version": "0.2.0",
+  "description": "在 Codex 中查看本机 workLog 总览和当前项目。",
   "mcpServers": "./.mcp.json",
   "requires_local_executor": true,
   "interface": {
     "displayName": "workLog",
-    "shortDescription": "查看当前项目的任务、进展、待办与历史。",
+    "shortDescription": "在 Dashboard 和项目侧栏查看和管理任务。",
     "category": "Productivity"
   }
 }

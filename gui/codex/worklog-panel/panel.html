@@ -13,6 +13,7 @@
     --muted: light-dark(#5d6571, #abb1bb);
     --page: light-dark(#fff, #202226);
     --surface: light-dark(#f4f5f8, #272a31);
+    --pagination-surface: light-dark(#f8faff, #242a35);
     --detail-surface: light-dark(#f7f8fb, #171a1f);
     --line: light-dark(#dce0e6, #3b3f48);
     --accent: light-dark(#234d7d, #bcd5ff);
@@ -58,6 +59,18 @@
   [data-surface="dashboard"] #check-updates, [data-surface="project"] #project-picker { display: none; }
   main { padding: 12px var(--gutter); }
   [data-surface="dashboard"] main { max-width: 1060px; margin-inline: auto; }
+  body:has(#tasks-view:not([hidden])) { display: flex; flex-direction: column; height: 100dvh; }
+  main:has(#tasks-view:not([hidden])) {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    overflow: auto;
+  }
+  #tasks-view { display: flex; flex: 1; flex-direction: column; min-height: 176px; }
+  #task-list-viewport { flex: 1; min-height: 0; overflow: auto; padding-block-end: 10px; scrollbar-width: thin; }
+  #task-list-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   #panel-status, .empty, .meta { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
   .list-header, .list-title, .list-actions, .handoff-header, .original h4, .meta {
     display: flex;
@@ -107,6 +120,26 @@
   .filter[aria-pressed="true"] { color: var(--accent); font-weight: 600; background: var(--selected); border-color: var(--selected-border); }
   .filter .icon { width: 12px; height: 12px; color: var(--status-color, var(--muted)); }
   .filter .count { font-size: 11px; }
+  .pagination {
+    display: flex;
+    flex: none;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 53px;
+    padding: 8px 12px;
+    border-block-start: 1px solid var(--line);
+    background: var(--pagination-surface);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pagination strong { color: var(--text); font-weight: 650; }
+  .page-controls { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .page-controls .icon-button { width: 30px; min-height: 30px; border-color: var(--line); background: var(--page); }
+  .page-controls .icon { width: 14px; height: 14px; }
+  #previous-page .icon { transform: scaleX(-1); }
+  .page-position { min-inline-size: 64px; text-align: center; }
   #tasks { display: grid; gap: 8px; }
   .group { min-width: 0; border: 1px solid var(--line); border-radius: 9px; overflow: clip; }
   .group-heading {
@@ -333,6 +366,9 @@
     :root { --gutter: 10px; }
     .task-detail { padding: 9px 8px 10px; }
     .section-content { padding-inline-start: 9px; }
+    .pagination { padding-inline: 8px; }
+    .page-controls { gap: 3px; }
+    .page-position { min-inline-size: 58px; }
   }
   @media (max-width: 345px) {
     .filters { gap: 3px; }
@@ -341,7 +377,7 @@
   }
   @media (pointer: coarse) {
     :is(.icon-button, .filter, .task-toggle, .task-status, .section-toggle, .history-toggle, .processed-toggle) { min-height: 44px; }
-    .icon-button { width: 44px; }
+    .icon-button, .page-controls .icon-button { width: 44px; min-height: 44px; }
   }
 </style>
 <svg aria-hidden="true" width="0" height="0" style="position:absolute">
@@ -391,11 +427,25 @@
       </div>
     </header>
     <div id="filters" class="filters" role="group" aria-label="按状态筛选任务"></div>
-    <div id="tasks"></div>
-    <div id="tasks-empty" class="tasks-empty" hidden>
-      <p id="empty-tasks-message" class="empty"></p>
-      <button id="show-all" type="button" class="text-button">查看全部任务</button>
+    <div id="task-list-viewport" tabindex="0" role="region" aria-label="任务列表滚动区">
+      <div id="tasks"></div>
+      <div id="tasks-empty" class="tasks-empty" hidden>
+        <p id="empty-tasks-message" class="empty"></p>
+        <button id="show-all" type="button" class="text-button">查看全部任务</button>
+      </div>
     </div>
+    <nav id="pagination" class="pagination" aria-label="任务列表分页" hidden>
+      <span><strong id="page-range"></strong> / 共 <span id="page-task-count"></span> 条</span>
+      <div class="page-controls">
+        <button type="button" id="previous-page" class="icon-button" aria-label="上一页" title="上一页" aria-controls="tasks" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        </button>
+        <span class="page-position" role="status">第 <strong id="page-number"></strong> / <span id="page-count"></span> 页</span>
+        <button type="button" id="next-page" class="icon-button" aria-label="下一页" title="下一页" aria-controls="tasks" disabled>
+          <svg class="icon" aria-hidden="true"><use href="#icon-chevron"/></svg>
+        </button>
+      </div>
+    </nav>
   </section>
 </main>
 <div id="status-menu" class="status-menu" popover="manual"></div>
@@ -572,6 +622,11 @@
   const filters = byId("filters");
   const tasks = byId("tasks");
   const tasksEmpty = byId("tasks-empty");
+  const taskListViewport = byId("task-list-viewport");
+  const pagination = byId("pagination");
+  const previousPage = byId("previous-page");
+  const nextPage = byId("next-page");
+  const pageSize = dashboard ? 20 : 12;
   const taskTemplate = byId("task-template");
   const projectFilter = byId("project-filter");
   const addTask = byId("add-task");
@@ -591,6 +646,7 @@
   let allProjects = [];
   let selectedProject = "";
   let selectedStatus = dashboard ? "active" : "all";
+  let currentPage = 1;
   let expandedTask = null;
   let refreshInProgress = false;
   let initializedData = false;
@@ -620,13 +676,14 @@
     PROGRESS: ["进展", "progress"],
     HANDOFF: ["交接", "handoff"],
     DECISION: ["决策", "file"],
+    BLOCKER: ["阻塞", "blocked"],
     STATUS: ["状态变更", "play"],
   };
   const todoStates = {
     OPEN: ["待处理", "todo"],
-    RESOLVED: ["已完成", "done"],
+    RESOLVED: ["已解决", "done"],
     CANCELLED: ["已取消", "cancelled"],
-    DISPOSED: ["已处理", "done"],
+    DISPOSED: ["已处置", "done"],
     INACTIVE: ["已失效", "paused"],
   };
   const updateStatuses = {
@@ -981,7 +1038,7 @@
     return row;
   }
 
-  function renderList() {
+  function renderList(targetTask = null) {
     closeStatusMenu();
     const scopes = scopedProjects();
     const available = scopes.flatMap((project) => project.tasks || []);
@@ -1002,18 +1059,37 @@
       filter.setAttribute("aria-controls", "tasks");
       filter.append(icon(statusIcon), label, element("span", String(counts.get(key) || 0), "count"));
       filter.addEventListener("click", () => {
-        selectedStatus = key;
-        renderList();
+        if (selectedStatus !== key) {
+          selectedStatus = key;
+          renderFirstPage();
+        }
         focusFilter();
       });
       filters.append(filter);
     }
 
+    const statusOrder = ["IN_PROGRESS", "BLOCKED", "TODO", "PAUSED", "DONE", "CANCELLED"];
+    const groups = dashboard
+      ? scopes.map((project) => ({project, status: null, list: (project.tasks || []).filter(visible)}))
+      : statusOrder.map((status) => ({
+        project: scopes[0], status, list: available.filter((task) => task.status === status && visible(task)),
+      })).filter(({list}) => list.length > 0);
+    const total = groups.reduce((count, {list}) => count + list.length, 0);
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const oldPage = currentPage;
+    if (targetTask) {
+      const targetIndex = groups.flatMap(({project, list}) => list.map((task) => taskKey(project, task))).indexOf(targetTask);
+      if (targetIndex !== -1) currentPage = Math.floor(targetIndex / pageSize) + 1;
+    }
+    currentPage = Math.max(1, Math.min(currentPage, pageCount));
+    const pageStart = (currentPage - 1) * pageSize;
+    const pageEnd = Math.min(pageStart + pageSize, total);
+
     tasks.replaceChildren();
     const idLength = available.reduce((longest, task) => Math.max(longest, task.number.length), 0);
     tasks.style.setProperty("--task-number-width", idLength * 7 + "px");
     let index = 0;
-    function group(status, project, list) {
+    function group(status, project, list, groupCount) {
       const name = dashboard ? projectLabel(project) : statuses.get(status)[0];
       const key = projectViewKey(project);
       const mark = dashboard ? "folder" : statuses.get(status)[1];
@@ -1021,7 +1097,7 @@
       const heading = element(dashboard ? "summary" : "h2", "", "group-heading");
       if (dashboard) heading.append(chevron());
       else wrapper.dataset.status = status;
-      heading.append(icon(mark), element("span", name), element("span", list.length + (dashboard ? "" : " 项"), "count"));
+      heading.append(icon(mark), element("span", name), element("span", groupCount + (dashboard ? "" : " 项"), "count"));
       wrapper.append(heading);
       if (dashboard) {
         wrapper.open = !closedProjects.has(key);
@@ -1039,17 +1115,24 @@
       wrapper.append(rows);
       return wrapper;
     }
-    if (dashboard) {
-      for (const project of scopes) {
-        tasks.append(group(null, project, (project.tasks || []).filter(visible)));
+    let groupStart = 0;
+    for (const {status, project, list} of groups) {
+      const rows = list.slice(Math.max(0, pageStart - groupStart), Math.max(0, pageEnd - groupStart));
+      // 保留空项目或无法读取项目的提示，不占任务名额。
+      const emptyGroupPage = Math.min(pageCount, Math.floor(groupStart / pageSize) + 1);
+      if (rows.length || (!list.length && currentPage === emptyGroupPage)) {
+        tasks.append(group(status, project, rows, list.length));
       }
-    } else {
-      const project = scopes[0];
-      for (const key of ["IN_PROGRESS", "BLOCKED", "TODO", "PAUSED", "DONE", "CANCELLED"]) {
-        const list = available.filter((task) => task.status === key && visible(task));
-        if (list.length) tasks.append(group(key, project, list));
-      }
+      groupStart += list.length;
     }
+    pagination.hidden = total === 0;
+    previousPage.disabled = currentPage <= 1;
+    nextPage.disabled = currentPage >= pageCount;
+    byId("page-range").textContent = total ? (pageStart + 1) + "–" + pageEnd : "";
+    byId("page-task-count").textContent = total;
+    byId("page-number").textContent = currentPage;
+    byId("page-count").textContent = pageCount;
+    if (currentPage !== oldPage) taskListViewport.scrollTop = 0;
     const visibleCount = counts.get(selectedStatus) || 0;
     const hasReadableProjects = scopes.some((project) => project.state === "ready");
     const filterEmpty = hasReadableProjects && visibleCount === 0 && available.length > 0;
@@ -1057,6 +1140,19 @@
     byId("empty-tasks-message").textContent = filterEmpty ? "当前筛选下暂无任务。" : "此项目还没有任务。";
     byId("show-all").hidden = !filterEmpty || selectedStatus === "all";
     addTask.disabled = !allProjects.some((project) => project.writable);
+  }
+
+  function renderFirstPage() {
+    currentPage = 1;
+    renderList();
+    taskListViewport.scrollTop = 0;
+  }
+
+  function turnPage(delta, origin, other) {
+    currentPage += delta;
+    renderList();
+    taskListViewport.scrollTop = 0;
+    if (origin.disabled) other.focus({preventScroll: true});
   }
 
   function chevron() {
@@ -1096,7 +1192,7 @@
     select.value = selected;
   }
 
-  function acceptView(result) {
+  function acceptView(result, targetTask) {
     window.clearTimeout(timeout);
     initializedData = true;
     if (result?.state !== "ready") {
@@ -1117,18 +1213,22 @@
     }
     emptyWorklog.hidden = true;
     if (dashboard) {
-      if (!allProjects.some((project) => projectViewKey(project) === selectedProject)) selectedProject = "";
+      if (selectedProject && !allProjects.some((project) => projectViewKey(project) === selectedProject)) {
+        selectedProject = "";
+        currentPage = 1;
+        taskListViewport.scrollTop = 0;
+      }
       projectOptions(projectFilter, allProjects, "全部项目", selectedProject);
     } else {
       projectName.textContent = result.projectName;
       projectName.hidden = false;
     }
     tasksView.hidden = false;
-    renderList();
+    renderList(targetTask);
     return true;
   }
 
-  async function refreshProject(feedback = "已刷新任务。") {
+  async function refreshProject(feedback = "已刷新任务。", targetTask) {
     if (refreshInProgress) return false;
     const fromGuide = !emptyWorklog.hidden;
     refreshInProgress = true;
@@ -1137,7 +1237,7 @@
     if (tasksView.hidden) panelStatus.hidden = true;
     refreshStatus.textContent = "正在刷新任务…";
     const result = await callTool(openTool, {});
-    const ok = acceptView(result);
+    const ok = acceptView(result, targetTask);
     refreshInProgress = false;
     refresh.disabled = false;
     retryProject.disabled = false;
@@ -1153,13 +1253,17 @@
   retryProject.addEventListener("click", async () => {
     if (await refreshProject() && !projectName.hidden) projectName.focus();
   });
+  previousPage.addEventListener("click", () => turnPage(-1, previousPage, nextPage));
+  nextPage.addEventListener("click", () => turnPage(1, nextPage, previousPage));
+  taskListViewport.addEventListener("scroll", closeStatusMenu);
   projectFilter.addEventListener("change", () => {
+    if (selectedProject === projectFilter.value) return;
     selectedProject = projectFilter.value;
-    renderList();
+    renderFirstPage();
   });
   byId("show-all").addEventListener("click", () => {
     selectedStatus = "all";
-    renderList();
+    renderFirstPage();
     focusFilter();
   });
 
@@ -1170,10 +1274,12 @@
     complete: ["完成", "task-complete"],
     cancel: ["取消任务", "task-cancel"],
     reopen: ["重新打开", "task-reopen"],
+    setBlocker: ["设为受阻", "blocker-set"],
+    resolveBlocker: ["解除阻塞", "blocker-resolve"],
   };
   const allowed = {
-    TODO: ["start", "complete", "cancel"],
-    IN_PROGRESS: ["pause", "complete", "cancel"],
+    TODO: ["start", "setBlocker", "complete", "cancel"],
+    IN_PROGRESS: ["pause", "setBlocker", "complete", "cancel"],
     PAUSED: ["resume", "complete", "cancel"],
     DONE: ["reopen"],
     CANCELLED: ["reopen"],
@@ -1225,7 +1331,10 @@
     const wasOpen = menuTrigger === trigger && menu.matches(":popover-open");
     closeStatusMenu();
     if (wasOpen) return;
-    const choices = allowed[task.lifecycle] || [];
+    const choices = [...(allowed[task.lifecycle] || [])];
+    if (task.status === "BLOCKED" || (task.lifecycle === "PAUSED" && task.blocked)) {
+      choices.splice(choices.indexOf("complete"), 0, "resolveBlocker");
+    }
     if (!choices.length) return;
     menu.replaceChildren();
     for (const action of choices) {
@@ -1235,6 +1344,7 @@
         closeStatusMenu();
         trigger.focus();
         if (action === "complete") void openCompletion(project, task);
+        else if (action === "setBlocker" || action === "resolveBlocker") void openBlocker(project, task, action);
         else if (action === "cancel" || action === "reopen") openReason(project, task, action);
         else void mutate(project, task, actions[action][1], {});
       });
@@ -1311,6 +1421,71 @@
       const reason = input.value.trim();
       if (!reason) return invalid("请填写原因。", input);
       return mutate(project, task, command, {reason});
+    };
+  }
+
+  async function openBlocker(project, task, action) {
+    const [label, command] = actions[action];
+    const resolving = action === "resolveBlocker";
+    resetDialog(label, resolving ? "确认解除" : "确认设置", taskLabel(project, task));
+    submitButton.disabled = true;
+    const loading = element("p", "正在核对任务和接手状态…", "meta");
+    dialogFields.append(loading);
+    closeButton.focus();
+    const result = await callTool("read_worklog_blocker_options", {
+      ...taskTarget(project, task), expectedRevision: task.revision,
+    });
+    if (!dialog.open || !loading.isConnected) return;
+    loading.remove();
+    if (result.state !== "ready") {
+      dialogError.textContent = result.message;
+      const reload = button("刷新任务");
+      reload.addEventListener("click", async () => {
+        dialog.close();
+        await refreshProject();
+        focusAfterWrite(project, task.id);
+      });
+      dialogFields.append(reload);
+      return;
+    }
+    const guards = {expected_context_position: result.contextPosition};
+    if (result.runId) guards.run_id = result.runId;
+    const primary = element(resolving ? "select" : "textarea");
+    const explanation = element("textarea");
+    explanation.rows = 3;
+    if (resolving) {
+      if (!result.blockers.length) {
+        dialogError.textContent = "任务已没有生效阻塞。请刷新列表。";
+        return;
+      }
+      for (const blocker of result.blockers) {
+        const caption = [blocker.summary, metadata(blocker)].filter(Boolean).join(" · ");
+        primary.add(new Option(caption, blocker.id));
+      }
+      const affected = element("p", "", "meta");
+      const condition = element("p", "", "meta");
+      const showCondition = () => {
+        const selected = result.blockers.find((item) => item.id === primary.value);
+        affected.textContent = selected && selected.blockedWork !== selected.summary ? "受阻事项：" + selected.blockedWork : "";
+        affected.hidden = !affected.textContent;
+        condition.textContent = selected ? "解除条件：" + selected.unblockCondition : "";
+      };
+      primary.addEventListener("change", showCondition);
+      showCondition();
+      dialogFields.append(labeled("要解除的阻塞", primary), affected, condition, labeled("解除说明", explanation));
+    } else {
+      primary.rows = 3;
+      dialogFields.append(labeled("受阻事项及原因", primary), labeled("解除条件", explanation));
+    }
+    submitButton.disabled = false;
+    primary.focus();
+    confirmAction = () => {
+      const work = primary.value.trim();
+      const reason = explanation.value.trim();
+      if (!work) return invalid(resolving ? "请选择要解除的阻塞。" : "请填写受阻事项及原因。", primary);
+      if (!reason) return invalid(resolving ? "请填写解除说明。" : "请填写解除条件。", explanation);
+      const fields = resolving ? {blocker_id: work, outcome_md: reason} : {blocked_work: work, unblock_condition: reason};
+      return mutate(project, task, command, {...guards, ...fields});
     };
   }
 
@@ -1477,10 +1652,14 @@
       closedProjects.delete(projectViewKey(project));
     }
     const feedback = result.state === "ready"
-      ? command === "task-create" && newTask ? "已添加 " + newTask.number + "。" : "已保存任务状态。"
+      ? command === "task-create" && newTask ? "已添加 " + newTask.number + "。"
+        : command === "blocker-set" ? "已设置阻塞。"
+        : command === "blocker-resolve" ? "已解除所选阻塞。" : "已保存任务状态。"
       : result.message || "任务写入失败。";
-    await refreshProject(feedback);
-    focusAfterWrite(project, newTask?.id || task?.id);
+    const updatedTask = newTask || task;
+    const targetTask = result.state === "ready" && updatedTask ? taskKey(project, updatedTask) : null;
+    await refreshProject(feedback, targetTask);
+    focusAfterWrite(project, updatedTask?.id);
   }
 
   addTask.addEventListener("click", addDialog);

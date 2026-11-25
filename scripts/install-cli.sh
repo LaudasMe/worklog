@@ -19,9 +19,9 @@ from zipfile import BadZipFile, ZipFile
 if sys.version_info < (3, 9):
     sys.exit("安装需要 Python 3.9 或更新版本。")
 
-version = "v0.4.0"
+version = "v0.5.0"
 archive_name = f"worklog-skill-{version}.zip"
-archive_sha256 = "06b1b87d9329d162402fcd69ae0f61d382d751e033493471b8040c818020873e"
+archive_sha256 = "c1dc5e0e808129fdf8a4790c61f382511ca02b48451afcbfbd120b8f8da88525"
 archive_url = f"https://github.com/floohubAI/worklog/releases/download/{version}/{archive_name}"
 user_home = Path.home()
 skills_dir = user_home / ".agents/skills"

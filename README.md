@@ -23,7 +23,7 @@ workLog 把散落在与Agent聊天里的信息整理成可追踪的任务、待�
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [手动安装与升级](docs/skill.md)
+脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.5.0) · [手动安装与升级](docs/skill.md)
 
 ### GUI 版（Codex 桌面端）
 
@@ -33,10 +33,10 @@ https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 
 ```text
 请在这台 Mac 上安装 workLog 的 Codex GUI 版。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果。
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh
 ```
 
-安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.1.1 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
+安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.2.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ## 三个使用场景
 

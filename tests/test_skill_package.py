@@ -10,6 +10,7 @@ from test_context import isolated_home
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "scripts" / "package_skill.py"
+RELEASE_VERSION = json.loads((ROOT / "release-version.json").read_bytes())["version"]
 
 
 class SkillPackageTest(unittest.TestCase):
@@ -28,7 +29,7 @@ class SkillPackageTest(unittest.TestCase):
     def test_package_reproducible_and_only_contains_tracked_runtime_sources(self):
         first = self.build(self.directory / "first")
         second = self.build(self.directory / "second")
-        self.assertEqual(first.name, "worklog-skill-v0.4.0.zip")
+        self.assertEqual(first.name, f"worklog-skill-{RELEASE_VERSION}.zip")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         expected = {
             "worklog/SKILL.md": "skills/worklog/SKILL.md",
@@ -52,6 +53,9 @@ class SkillPackageTest(unittest.TestCase):
             self.assertCountEqual(archive.namelist(), expected)
             for member, source in expected.items():
                 self.assertEqual(archive.read(member), (ROOT / source).read_bytes())
+            instructions = archive.read("worklog/INSTALL.md").decode()
+            self.assertIn(f'SKILL_ZIP="/absolute/path/to/{first.name}"', instructions)
+            self.assertIn(f"当前发布版本为 `{RELEASE_VERSION}`", instructions)
 
     def test_cli_works_after_install_from_another_directory(self):
         installed = self.directory / "caller/.agents/skills"
@@ -131,11 +135,11 @@ class SkillPackageTest(unittest.TestCase):
         before_files, before_database = files_at(installed), database.read_bytes()
         version = version_command("release-version", self.directory)
         self.assertEqual(version["protocol_version"], "2.0")
-        self.assertEqual(version["result"]["release_version"], "v0.4.0")
+        self.assertEqual(version["result"]["release_version"], RELEASE_VERSION)
         self.assertEqual(version["result"]["cli_path"], str(cli.resolve()))
         self.assertNotIn("project_id", version)
         offline = version_command("check-update", project)["result"]
-        self.assertEqual(offline["installed_version"], "v0.4.0")
+        self.assertEqual(offline["installed_version"], RELEASE_VERSION)
         self.assertIsNone(offline["latest_version"])
         self.assertEqual(offline["status"], "unknown")
         self.assertTrue(offline["error"])

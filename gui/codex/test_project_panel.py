@@ -160,7 +160,7 @@ class ProjectPanelTests(unittest.TestCase):
                 detail = task_sections(root, task_id, project_key)
                 history = detail["history"]
                 indexed = {row["id"]: row for row in history}
-                self.assertEqual({row["kind"] for row in history}, {"PROGRESS", "HANDOFF", "DECISION", "STATUS"})
+                self.assertEqual({row["kind"] for row in history}, {"PROGRESS", "HANDOFF", "DECISION", "STATUS", "BLOCKER"})
                 self.assertEqual([row["at"] for row in history], sorted((row["at"] for row in history), reverse=True))
                 self.assertIn(view["tasks"][0]["progress"]["summary"], [row["summary"] for row in history])
                 self.assertIn(view["tasks"][0]["handoff"]["id"], indexed)

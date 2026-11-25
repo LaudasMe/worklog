@@ -14,8 +14,8 @@ from uuid import uuid4
 GUI = Path(__file__).resolve().parent
 sys.path[:0] = [str(GUI.parent.parent), str(GUI / "worklog-panel")]
 
-from server import CONTINUE, DASHBOARD, HISTORY, MUTATE, SECTIONS, TOOL, respond
-from worklog_context import record
+from server import BLOCKERS, CONTINUE, DASHBOARD, HISTORY, MUTATE, SECTIONS, TOOL, respond
+from worklog_context import record, record_get
 from worklog_store import connect, initialize, metadata, open_run, project_db, snapshot, task_position, task_row, write_request
 
 
@@ -149,8 +149,11 @@ class DashboardTests(unittest.TestCase):
             params = parse_qs(parts.query)
             self.assertEqual(params["path"], [str(root)])
             self.assertIn(self.keys[root]["project_id"], params["prompt"][0])
+            self.assertIn(self.keys[root]["data_generation"], params["prompt"][0])
             self.assertIn(self.tasks[root], params["prompt"][0])
             self.assertIn("T001", params["prompt"][0])
+            self.assertIn("授权本聊天持续跟进这项任务", params["prompt"][0])
+            self.assertIn("明确确认替换后再写入", params["prompt"][0])
         self.assertEqual(self.fingerprints(), before)
         args = {"taskId": self.tasks[self.alpha], "projectId": self.keys[self.beta]["project_id"]}
         self.assertEqual(self.call(CONTINUE, args)["state"], "unavailable")
@@ -196,6 +199,49 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(detail["todos"]["open"][0]["summary"], "待核对")
         self.assertEqual(detail["todos"]["processed"], [])
 
+    def test_both_entries_distinguish_disposed_and_resolved_todos_on_done_task(self):
+        original = self.write(self.alpha, "record", records=[
+            {"kind": "PROGRESS", "summary": "初验通过", "body_md": "初验原文",
+             "details": {"processed_scope": ["初验"], "impacts": []}},
+            {"kind": "TODO", "summary": "转交校对", "body_md": "校对原文", "details": {"status": "OPEN"}},
+            {"kind": "TODO", "summary": "复测通过", "body_md": "复测原文", "details": {"status": "OPEN"}},
+            {"kind": "TODO", "summary": "留待二次核对", "body_md": "二次核对原文", "details": {"status": "OPEN"}},
+        ])["records"]
+        proof, transfer, check, retained = [item["record_id"] for item in original]
+        evidence = [{"type": "RECORD", "target_record_id": proof}]
+        dispositions = {transfer: "等待交接", check: "等待复测", retained: "留在本任务"}
+        completed = self.write(self.alpha, "task-complete", completed_scope="初次验收范围",
+                               evidence=evidence, todo_dispositions=dispositions)
+        self.write(self.alpha, "record", records=[
+            {"kind": "TODO", "summary": "转交校对", "body_md": "同意转交", "replaces_id": transfer, "refs": evidence,
+             "details": {"status": "RESOLVED", "outcome_kind": "DISPOSED", "outcome_md": "已转交 T002"}},
+            {"kind": "TODO", "summary": "复测通过", "body_md": "完成实测", "replaces_id": check, "refs": evidence,
+             "details": {"status": "RESOLVED", "outcome_md": "两个用例均通过"}},
+        ])
+
+        self.by_project()
+        self.call(TOOL, folder=self.alpha)
+        task = {"taskId": self.tasks[self.alpha]}
+        targets = ((None, {**task, "projectId": self.keys[self.alpha]["project_id"]}), (self.alpha, task))
+        before = self.fingerprints()
+        for folder, args in targets:
+            with self.subTest(folder=folder):
+                detail = self.call(SECTIONS, args, folder=folder)
+                self.assertEqual(detail["todos"]["open"], [])
+                processed = {item["summary"]: (item["status"], item["outcome"])
+                             for item in detail["todos"]["processed"]}
+                self.assertEqual(processed, {
+                    "转交校对": ("DISPOSED", "已转交 T002"),
+                    "复测通过": ("RESOLVED", "两个用例均通过"),
+                    "留待二次核对": ("DISPOSED", "留在本任务"),
+                })
+                history = self.call(HISTORY, {
+                    **args, "source": "change", "recordId": completed["change_id"],
+                }, folder=folder)
+                for original_value in ("初次验收范围", proof, *dispositions.values()):
+                    self.assertIn(original_value, history["body"])
+        self.assertEqual(self.fingerprints(), before)
+
     def test_mcp_writes_and_retries_keep_the_two_same_number_tasks_separate(self):
         self.by_project()
         thread_view = self.call(TOOL, folder=self.beta)
@@ -224,6 +270,110 @@ class DashboardTests(unittest.TestCase):
         args["request"]["operation_id"] = str(uuid4())
         self.assertEqual(self.call(MUTATE, args, folder=self.beta)["code"], "revision_conflict")
 
+    def blocker_target(self, folder=None):
+        project = self.call(TOOL, folder=self.alpha) if folder else self.by_project()[str(self.alpha)]
+        task = project["tasks"][0]
+        scope = {} if folder else {"projectId": project["id"]}
+        options = self.call(BLOCKERS, {
+            **scope, "taskId": task["id"], "expectedRevision": task["revision"],
+        }, folder=folder)
+        return scope, task, options
+
+    def blocker_request(self, target, command="blocker-set", **fields):
+        scope, task, options = target
+        project = self.keys[self.alpha]
+        if options.get("runId"):
+            fields.setdefault("run_id", options["runId"])
+        return {**scope, "command": command, "request": {
+            "operation_id": str(uuid4()), "project_id": project["project_id"],
+            "data_generation": project["data_generation"], "task_id": task["id"],
+            "expected_revision": task["revision"], "expected_context_position": options.get("contextPosition", 0),
+            **fields,
+        }}
+
+    def test_blockers_across_surfaces_keep_history_and_restore_base_status(self):
+        for state in ("TODO", "IN_PROGRESS"):
+            with self.subTest(base=state):
+                if state == "IN_PROGRESS":
+                    self.write(self.alpha, "task-start")
+                ids = []
+                for folder, label in ((None, "样本一"), (self.alpha, "样本二")):
+                    target = self.blocker_target(folder)
+                    before = self.fingerprints()
+                    invalid = self.blocker_request(target, blocked_work=label, unblock_condition=" ")
+                    self.assertEqual(self.call(MUTATE, invalid, folder=folder)["code"], "invalid_input")
+                    self.assertEqual(self.fingerprints(), before)
+                    request = self.blocker_request(target, blocked_work=label, unblock_condition="样本到齐")
+                    wrote = self.call(MUTATE, request, folder=folder)
+                    self.assertEqual(wrote, self.call(MUTATE, request, folder=folder))
+                    ids.append(wrote["records"][0]["record_id"])
+                    stale = self.blocker_request(target, blocked_work="过期提交", unblock_condition="输入已变化")
+                    self.assertEqual(self.call(MUTATE, stale, folder=folder)["code"], "revision_conflict")
+                for index, folder in enumerate((self.alpha, None)):
+                    for surface in (None, self.alpha):
+                        _, task, options = self.blocker_target(surface)
+                        self.assertEqual((task["status"], task["lifecycle"]), ("BLOCKED", state))
+                        self.assertEqual({row["id"] for row in options["blockers"]}, set(ids[index:]))
+                    target = self.blocker_target(folder)
+                    before = self.fingerprints()
+                    invalid = self.blocker_request(target, "blocker-resolve", blocker_id=ids[index], outcome_md=" ")
+                    self.assertEqual(self.call(MUTATE, invalid, folder=folder)["code"], "invalid_input")
+                    self.assertEqual(self.fingerprints(), before)
+                    request = self.blocker_request(target, "blocker-resolve", blocker_id=ids[index], outcome_md="已确认样本到齐")
+                    result = self.call(MUTATE, request, folder=folder)
+                    self.assertEqual(result, self.call(MUTATE, request, folder=folder))
+                    resolution = result["records"][0]["record_id"]
+                    args = {**target[0], "taskId": target[1]["id"]}
+                    detail = self.call(SECTIONS, args, folder=folder)
+                    entries = {row["id"]: row for row in detail["history"]}
+                    self.assertTrue(entries[ids[index]]["superseded"])
+                    expected_source = ("codex", "viewing-chat") if folder else ("codex-dashboard", "global")
+                    self.assertEqual((entries[resolution]["client"], entries[resolution]["sessionId"]), expected_source)
+                    original = self.call(HISTORY, {
+                        **args, "recordId": resolution, "source": "record",
+                    }, folder=folder)
+                    self.assertEqual(original["body"], "已确认样本到齐")
+                    with closing(connect(project_db(self.alpha), "ro")) as db:
+                        saved = record_get(db, resolution, self.alpha)
+                        self.assertEqual(saved["replaces_id"], ids[index])
+                        self.assertEqual(saved["refs"], [{"type": "USER_CONFIRMATION", "note": "已确认样本到齐"}])
+                for surface in (None, self.alpha):
+                    _, task, options = self.blocker_target(surface)
+                    self.assertEqual((task["status"], task["lifecycle"]), (state, state))
+                    self.assertEqual(options["blockers"], [])
+                self.assertEqual(self.by_project()[str(self.beta)]["tasks"][0]["status"], "TODO")
+
+    def test_manual_blockers_require_handoff_and_fresh_run(self):
+        own = self.write(self.alpha, "claim", client="codex", session_id="viewing-chat")["task"]["active_run"]
+        old = self.blocker_target(self.alpha)
+        self.assertEqual(old[2]["runId"], own["run_id"])
+        request = self.blocker_request(old, blocked_work="原阻塞", unblock_condition="样本到齐")
+        blocker_id = self.call(MUTATE, request, folder=self.alpha)["records"][0]["record_id"]
+        self.write(self.alpha, "claim", client="codex", session_id="another-chat", replaces_run_id=own["run_id"])
+        before = self.fingerprints()
+        for surface in (None, self.alpha):
+            target = self.blocker_target(surface)
+            self.assertEqual(target[2]["code"], "handoff_required")
+            for command, fields in (
+                ("blocker-set", {"blocked_work": "另一条", "unblock_condition": "无法写入"}),
+                ("blocker-resolve", {"blocker_id": blocker_id, "outcome_md": "无法写入"}),
+            ):
+                denied = self.blocker_request(target, command, **fields)
+                self.assertEqual(self.call(MUTATE, denied, folder=surface)["code"], "handoff_required")
+        self.assertEqual(before, self.fingerprints())
+        with closing(connect(project_db(self.alpha), "ro")) as db:
+            run_id = open_run(db, self.tasks[self.alpha])["run_id"]
+        self.write(self.alpha, "handoff", run_id=run_id, summary="交接", body_md="交接依据", next_step="核对")
+        for surface in (None, self.alpha):
+            target = self.blocker_target(surface)
+            self.assertIsNone(target[2]["runId"])
+            stale = self.blocker_request(target, "blocker-resolve", blocker_id=blocker_id,
+                                         outcome_md="旧接手无效", run_id=own["run_id"])
+            self.assertEqual(self.call(MUTATE, stale, folder=surface)["code"], "stale_run")
+        fresh = self.blocker_request(self.blocker_target(), "blocker-resolve", blocker_id=blocker_id, outcome_md="已交接")
+        self.assertEqual(self.call(MUTATE, fresh)["state"], "ready")
+        self.assertEqual(self.blocker_target(self.alpha)[1]["status"], "IN_PROGRESS")
+
     def test_empty_malformed_and_removed_registry(self):
         self.by_project()
         self.registry.unlink()
@@ -242,6 +392,23 @@ class DashboardTests(unittest.TestCase):
         }}
         self.assertEqual(self.call(MUTATE, request)["code"], "project_mismatch")
         self.assertEqual(self.call(TOOL, folder=self.root)["code"], "not_initialized")
+
+    def test_paused_task_can_resolve_existing_blocker_but_cannot_add_one(self):
+        self.write(self.alpha, "task-start")
+        request = self.blocker_request(
+            self.blocker_target(), blocked_work="待观测", unblock_condition="有测试结果"
+        )
+        initial = self.call(MUTATE, request)["records"][0]["record_id"]
+        self.write(self.alpha, "task-pause")
+        target = self.blocker_target(self.alpha)
+        self.assertEqual((target[1]["status"], target[1]["blocked"]), ("PAUSED", True))
+        self.assertEqual([row["id"] for row in target[2]["blockers"]], [initial])
+        disallowed = self.blocker_request(target, blocked_work="新阻塞", unblock_condition="有输入")
+        self.assertEqual(self.call(MUTATE, disallowed, folder=self.alpha)["code"], "task_state_conflict")
+        resolve = self.blocker_request(target, "blocker-resolve", blocker_id=initial, outcome_md="已有测试结果")
+        self.assertEqual(self.call(MUTATE, resolve, folder=self.alpha)["state"], "ready")
+        _, task, options = self.blocker_target()
+        self.assertEqual((task["status"], task["blocked"], options["blockers"]), ("PAUSED", False, []))
 
 
 if __name__ == "__main__":

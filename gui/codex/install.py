@@ -8,11 +8,13 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path, PurePosixPath
+import select
 import shutil
 import stat
 import subprocess
 import sys
 from tempfile import mkdtemp, NamedTemporaryFile
+from time import monotonic
 from zipfile import BadZipFile, ZipFile
 
 PLUGIN = "worklog-codex"
@@ -144,16 +146,27 @@ def activate_skill(skill, candidate, previous, staging, version):
         raise InstallError(f"CLI／Skill 安装失败（{step}）。{recovery} {error}") from error
 
 
-def confirm_replacement(current, bundled, parse_version):
-    if current and parse_version(current) >= parse_version(bundled):
+def confirm_replacement(current, bundled, parse_version, *, same_version_changed=False):
+    if current and parse_version(current) >= parse_version(bundled) and not same_version_changed:
         print(f"现有 CLI／Skill {current}，随包版本 {bundled}。沿用现有安装。", flush=True)
         return False
     existing = f"现有 CLI／Skill {current}" if current else "现有版本无法识别"
     print(f"{existing}，随包版本 {bundled}。", flush=True)
+    if same_version_changed:
+        print("随包与现有的同版本 CLI／Skill 文件有差异。", flush=True)
     try:
         return input("是否整套替换现有 CLI／Skill？[y/N] ").strip().lower() in {"y", "yes"}
     except EOFError:
         return False
+
+
+def matches_skill(installed, candidate):
+    for path in candidate.rglob("*"):
+        if path.is_file():
+            existing = installed / path.relative_to(candidate)
+            if not existing.is_file() or existing.read_bytes() != path.read_bytes():
+                return False
+    return True
 
 
 def write_atomic(path, data):
@@ -166,6 +179,55 @@ def write_atomic(path, data):
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def restore_disabled_plugin(codex, root, environment, plugin_target):
+    # Codex CLI 的 plugin add 总会启用插件。交由 Codex 修改这个配置值，保留其他设置。
+    initialize = {"id": 0, "method": "initialize",
+                  "params": {"clientInfo": {"name": "worklog-installer", "version": "1"}}}
+    write_config = {
+        "id": 1, "method": "config/value/write", "params": {
+            "keyPath": f"plugins.{plugin_target}.enabled",
+            "value": False,
+            "mergeStrategy": "replace",
+        },
+    }
+    with subprocess.Popen(
+        [codex, "app-server", "--listen", "stdio://"], cwd=root, env=environment,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    ) as server:
+        def send(*messages):
+            server.stdin.write("".join(json.dumps(message) + "\n" for message in messages).encode())
+            server.stdin.flush()
+
+        try:
+            send(initialize)
+            deadline = monotonic() + 15
+            pending = b""
+            while monotonic() < deadline:
+                if not select.select([server.stdout], [], [], max(0, deadline - monotonic()))[0]:
+                    break
+                chunk = os.read(server.stdout.fileno(), 8192)
+                if not chunk:
+                    break
+                *lines, pending = (pending + chunk).split(b"\n")
+                for line in lines:
+                    reply = json.loads(line)
+                    if reply.get("id") == 0:
+                        if "error" in reply:
+                            raise InstallError(f"Codex 配置服务初始化失败。{reply['error']}")
+                        send({"method": "initialized"}, write_config)
+                    elif reply.get("id") == 1:
+                        if reply.get("result", {}).get("status") == "ok":
+                            return
+                        raise InstallError(f"Codex 未能恢复插件停用状态。{reply.get('error', reply.get('result'))}")
+            raise InstallError("等待 Codex 恢复插件停用状态时未收到回执。")
+        finally:
+            server.stdin.close()
+            try:
+                server.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                server.kill()
 
 
 def install_plugin(payload, archive_id, version, codex_home, codex):
@@ -210,52 +272,61 @@ def install_plugin(payload, archive_id, version, codex_home, codex):
     command = [codex, "plugin"]
     plugin_target = f"{PLUGIN}@{MARKET}"
 
-    def plugin_is_installed():
-        entries = json.loads(checked_run([*command, "list", "--json"], root, environment))["installed"]
-        return any(item["pluginId"] == plugin_target for item in entries)
+    def plugin_state():
+        raw = checked_run([*command, "list", "--marketplace", MARKET, "--json"], root, environment)
+        entries = json.loads(raw)["installed"]
+        return next(
+            ({key: item[key] for key in ("version", "enabled")} for item in entries
+             if item["pluginId"] == plugin_target),
+            None,
+        )
 
-    previous_installed = None
-    if earlier is not None:
-        try:
-            previous_installed = plugin_is_installed()
-        except (InstallError, OSError, KeyError, ValueError):
-            # A different marketplace may be invalid. Leave the normal install path available.
-            pass
+    def registered_market():
+        raw = checked_run([*command, "marketplace", "list", "--json"], root, environment)
+        entries = json.loads(raw)["marketplaces"]
+        return next((item for item in entries if item["name"] == MARKET), None)
 
-    write_atomic(manifest, (json.dumps(market, ensure_ascii=False, indent=2) + "\n").encode())
-    added_market = False
-    plugin_updated = False
-    step = "登记本地插件"
+    previous = plugin_state()
+    marketplace = registered_market()
+    if marketplace is not None and Path(marketplace["root"]).resolve() != root:
+        raise InstallError("workLog 的本地 marketplace 已登记到另一目录。请先处理已有登记。")
+    if previous is not None and (earlier is None or marketplace is None):
+        raise InstallError("找不到已安装插件的原 marketplace 清单，无法安全升级。")
+
+    def restore_plugin():
+        if previous is None and plugin_state() is not None:
+            checked_run([*command, "remove", plugin_target], root, environment)
+        if marketplace is None and registered_market() is not None:
+            checked_run([*command, "marketplace", "remove", MARKET], root, environment)
+        if earlier is None:
+            manifest.unlink(missing_ok=True)
+        else:
+            write_atomic(manifest, earlier)
+        if previous is not None:
+            checked_run([*command, "add", plugin_target, "--json"], root, environment)
+            if not previous["enabled"]:
+                restore_disabled_plugin(codex, root, environment, plugin_target)
+        if plugin_state() != previous or registered_market() != marketplace:
+            raise InstallError("回查结果与安装前的 Codex 插件或 marketplace 状态不一致。")
+
+    step = "写入本地插件清单"
     try:
+        write_atomic(manifest, (json.dumps(market, ensure_ascii=False, indent=2) + "\n").encode())
+        step = "登记本地插件"
         checked_run([*command, "marketplace", "add", str(root)], root, environment)
-        added_market = earlier is None
         step = "启用 Codex 侧栏"
         report_text = checked_run([*command, "add", plugin_target, "--json"], root, environment)
-        plugin_updated = True
         report = json.loads(report_text)
         if "gui-codex-v" + report["version"] != version:
             raise InstallError("Codex 返回的插件版本与完整包不一致。")
     except (Exception, KeyboardInterrupt) as error:
         try:
-            if earlier is not None:
-                write_atomic(manifest, earlier)
-                checked_run([*command, "marketplace", "add", str(root)], root, environment)
-                if previous_installed is False:
-                    if plugin_is_installed():
-                        checked_run([*command, "remove", plugin_target], root, environment)
-                else:
-                    checked_run([*command, "add", plugin_target, "--json"], root, environment)
-            else:
-                if plugin_updated:
-                    checked_run([*command, "remove", plugin_target], root, environment)
-                if added_market:
-                    checked_run([*command, "marketplace", "remove", MARKET], root, environment)
-                manifest.unlink(missing_ok=True)
+            restore_plugin()
         except (InstallError, OSError, KeyError, ValueError) as recovery_error:
             raise InstallError(
                 f"Codex 侧栏安装失败（{step}）。{error}。恢复插件登记失败。{recovery_error}"
             ) from error
-        raise InstallError(f"Codex 侧栏安装失败（{step}）。{error}") from error
+        raise InstallError(f"Codex 侧栏安装失败（{step}）。已恢复安装前的插件状态。{error}") from error
     return plugin_root
 
 
@@ -294,8 +365,10 @@ def install(bundle, codex_home, codex):
             extract_skill(archive, candidate)
             validate_skill(candidate, bundled)
             if alternate is None:
+                current = read_release_version(skill / SKILL_VERSION_FILE)
                 replace = not exists(skill) or confirm_replacement(
-                    read_release_version(skill / SKILL_VERSION_FILE), bundled, parse_version,
+                    current, bundled, parse_version,
+                    same_version_changed=current == bundled and not matches_skill(skill, candidate),
                 )
             else:
                 print(f"发现两套用户级 CLI／Skill，保留 {skill} 和 {alternate}。随包版本 {bundled}。", flush=True)

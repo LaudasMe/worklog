@@ -1,10 +1,10 @@
 # 安装 workLog Codex GUI
 
-`gui-codex-v0.1.0` 完整包随附 workLog CLI／Skill `v0.4.0`。在 macOS 上需要 Python 3.9 或以上以及支持插件安装的 Codex 桌面端。
+`gui-codex-v0.2.0` 完整包随附 workLog CLI／Skill `v0.5.0`。在 macOS 上需要 Python 3.9 或以上以及支持插件安装的 Codex 桌面端。
 
 ## 本地安装
 
-解压完整包后，在终端进入 `worklog-codex-gui-v0.1.0` 目录运行以下命令。
+解压完整包后，在终端进入 `worklog-codex-gui-v0.2.0` 目录运行以下命令。
 
 ```sh
 python3 -B install.py
@@ -12,11 +12,15 @@ python3 -B install.py
 
 安装器会通过 Codex CLI 登记并启用本地侧栏。它会从 PATH 或应用安装目录查找 Codex CLI，也可以用 `--codex /absolute/path/to/codex` 指定。安装完成后可以移走解压目录。
 
-首次安装会将 CLI 和 Skill 一起放入 `~/.agents/skills/worklog/`。如果用户只在 Codex 的 `skills/` 目录里安装过 workLog，安装器会沿用该位置。如果两个用户目录各有一套安装，安装器会保留两套。已有相同或更高版本时保留原安装。安装器会列出现有旧版本与随包版本，或者提示现有版本无法识别。输入 `y` 才会整套替换，按回车则保留。替换失败时，安装器会尝试恢复原安装并显示失败步骤。
+首次安装会将 CLI 和 Skill 一起放入 `~/.agents/skills/worklog/`。如果用户只在 Codex 的 `skills/` 目录里安装过 workLog，安装器会沿用该位置。如果两个用户目录各有一套安装，安装器会保留两套。已有更高版本或同版本且文件一致时保留原安装。现有版本较旧、无法识别或与随包同版本文件有差异时，安装器会询问是否替换。输入 `y` 才会整套替换，按回车则保留。替换失败时，安装器会尝试恢复原安装并显示失败步骤。
 
 GUI 的本地插件文件保存在 Codex 配置目录的 `worklog/codex/`，默认配置目录为 `~/.codex`。项目级 Skill 由各项目维护。在不同项目中打开聊天时，通过「查看当前使用的 workLog 版本」可以确认实际选用的 Skill。
 
-## 打开侧栏
+## 打开 Dashboard
+
+安装后重启 Codex，从主侧栏的应用列表打开或固定 **workLog Dashboard**。Dashboard 可查看本机已登记的项目和任务，也可与项目侧栏同时使用。
+
+## 打开项目侧栏
 
 1. 从 workLog 项目根目录或其中的子目录新建本地 Codex 聊天。如果界面还处于草稿状态，先发一条消息建立聊天。
 2. 在聊天里让 workLog Skill 读取任务，或者保存一条进展。可以先选中 `worklog` Skill，再说「查看 T001 的进展」或「记录 T001 的进展，并保存下一步」。

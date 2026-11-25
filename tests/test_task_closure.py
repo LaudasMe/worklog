@@ -1,9 +1,11 @@
 from contextlib import closing
 import json
+from zipfile import ZipFile
 
 from test_context import ContextCase, MARKDOWN, SeededContextCase, item, progress, source_at
 from test_task_lifecycle import record_ref
 from test_task_lifecycle_upgrade import BLOCKER_DETAILS, CONTEXT_FILES, HISTORICAL_REVISIONS, resolved_blocker
+from scripts.package_skill import build_package
 from worklog_store import connect, schema_version
 
 
@@ -210,6 +212,145 @@ class TaskClosureTest(SeededContextCase):
                 detail = self.detail(task)
                 self.assertEqual(ids(detail["todos"]), [carried["record_id"]] if selected == "TODO" else [])
                 self.assertEqual(detail["reopen_candidates"], [])
+
+
+class TerminalTodoTest(ContextCase):
+    def save(self, operation, task, items, **options):
+        return self.write("record", operation, self.identity, scope="TASK", task_id=task["task_id"],
+                          expected_revision=task["revision"],
+                          expected_context_position=task.get("context_position", 0),
+                          records=items, **options)
+
+    def context(self, task):
+        return self.call("context", "--task", task["task_id"])["result"]
+
+    def test_terminal_task_history_and_selective_reopen_after_cancellation(self):
+        self.identity = self.call("init", data={"name": "终态历史验收"})
+        for status in ("DONE", "CANCELLED"):
+            with self.subTest(status=status):
+                task = self.write("task-create", f"new-{status}", self.identity, title=status)["result"]["task"]
+                original = [progress("操作前进展"),
+                            item("TODO", "复测边界", details={"status": "OPEN"}),
+                            item("TODO", "补齐附件", details={"status": "OPEN"})]
+                log, todo, omitted = self.save(f"original-{status}", task, original)["result"]["records"]
+                guards = {"task_id": task["task_id"], "expected_revision": task["revision"]}
+                if status == "DONE":
+                    self.write("task-complete", "complete-case", self.identity, **guards,
+                               completed_scope="一轮验收", evidence=[record_ref(log["record_id"])],
+                               todo_dispositions={todo["record_id"]: "复测转交", omitted["record_id"]: "附件存档"})
+                else:
+                    self.write("task-cancel", "cancel-case", self.identity, **guards, reason="结束本轮")
+                before = self.context(task)
+                terminal = before["task"]
+                saved_bytes = self.db.read_bytes()
+                new_open = item("TODO", "终态不能新增", details={"status": "OPEN"})
+                self.save(f"reject-open-{status}", terminal, [progress("批次也不可部分写入"), new_open],
+                          error="task_state_conflict")
+                self.save(f"reject-open-replacement-{status}", terminal, [
+                    {**new_open, "replaces_id": todo["record_id"]},
+                ], error="task_state_conflict")
+                self.assertEqual(self.db.read_bytes(), saved_bytes)
+
+                historical = progress("补记验收")
+                extra, = self.save(f"append-{status}", terminal, [historical])["result"]["records"]
+                corrected = progress("已更正验收记录", replaces_id=extra["record_id"])
+                correction, = self.save(f"correct-{status}", self.context(task)["task"], [corrected])["result"]["records"]
+                old = self.call("record-get", extra["record_id"])["result"]
+                new = self.call("record-get", correction["record_id"])["result"]
+                self.assertEqual((old["body_md"], old["superseded_by"]),
+                                 (historical["body_md"], correction["record_id"]))
+                self.assertEqual((new["body_md"], new["replaces_id"]),
+                                 (corrected["body_md"], extra["record_id"]))
+                current = self.context(task)
+                self.assertEqual(current["task"]["status"], status)
+                self.assertEqual(current["task"].get("completion"), terminal.get("completion"))
+                if status == "DONE":
+                    continue
+                closure = item("TODO", "处理原待办", details={"status": "RESOLVED", "outcome_md": "已经复核"},
+                               replaces_id=todo["record_id"], refs=[record_ref(log["record_id"])])
+                self.save("resolve-cancelled", current["task"], [closure], error="task_state_conflict")
+                reopening = self.write("task-reopen", "reopen-case", self.identity,
+                                       task_id=task["task_id"], expected_revision=terminal["revision"],
+                                       reason="只恢复复测", evidence=CONFIRMATION)["result"]
+                self.assertEqual(ids(reopening["lifecycle"]["reopen_candidates"]), ids([todo, omitted]))
+                reopened = self.context(task)
+                self.assertEqual(reopened["todos"], [])
+                self.save("select", reopened["task"], [
+                    {**original[1], "carry_forward_id": todo["record_id"]},
+                ])
+                current = self.context(task)
+                self.assertEqual([row["summary"] for row in current["todos"]], [original[1]["summary"]])
+                self.assertEqual(current["todos"][0]["refs"][0]["target_record_id"], todo["record_id"])
+                self.assertEqual(set(ids(current["action_history"])), set(ids([todo, omitted])))
+                for original_action, action in zip(original[1:], (todo, omitted)):
+                    record = self.call("record-get", action["record_id"])["result"]
+                    self.assertEqual((record["details"]["status"], record["body_md"]),
+                                     ("OPEN", original_action["body_md"]))
+
+    def test_schema_four_legacy_todos_can_be_disposed_or_resolved(self):
+        old = source_at("c2d9e39fa6eac03127cadfd8e6d4070807c04eaf", self.root / "legacy", CONTEXT_FILES + (
+            "schema_lifecycle.sql", "schema_v4.sql", "worklog_projects.py", "worklog_release.py", "release-version.json",
+        ))
+        with ZipFile(build_package(self.root / "dist")) as package:
+            package.extractall(self.root / "skill")
+        skill = self.root / "skill" / "worklog" / "scripts" / "worklog.py"
+        self.identity = self.call("init", cli=old, data={"name": "schema 4 已完成旧库"})
+        task = self.write("task-create", "new", self.identity, cli=old, title="旧版验收")["result"]["task"]
+        original_evidence = progress("旧版验收依据")
+        evidence, = self.save("evidence", task, [original_evidence], cli=old)["result"]["records"]
+        done = self.write("task-complete", "old-complete", self.identity, cli=old, task_id=task["task_id"],
+                          expected_revision=task["revision"], completed_scope="初次验收",
+                          evidence=[record_ref(evidence["record_id"])])["result"]["task"]
+        old_items = [item("TODO", title, details={"status": "OPEN"})
+                     for title in ("转交文档补齐", "复测环境已修复", "继续跟进升级")]
+        disposed, resolved, remaining = self.save(
+            "old-open", {**done, "context_position": evidence["position"]}, old_items, cli=old,
+        )["result"]["records"]
+        protocol = ("--protocol-version", "2.0")
+        before = self.call(*protocol, "snapshot", cli=old)
+        changes = ("changes", "--project-id", self.identity["project_id"],
+                   "--data-generation", self.identity["data_generation"], "--after", str(before["result"]["watermark"]))
+        baseline_changes = self.call(*protocol, *changes, cli=old)
+        original = self.context(task)
+        self.assertEqual(original["schema_version"], 4)
+        self.assertEqual(set(ids(original["todos"])), set(ids([disposed, resolved, remaining])))
+        self.assertEqual(original["task"]["completion"], done["completion"])
+
+        current_task = original["task"]
+        stale = item("TODO", "新增开放项", details={"status": "OPEN"})
+        self.save("skill-reject-open", current_task, [stale], cli=skill, error="task_state_conflict")
+        for write_cli, operation, source, original_item, details in (
+            (None, "dispose", disposed, old_items[0], {"outcome_kind": "DISPOSED", "outcome_md": "已转交另一任务"}),
+            (skill, "resolve", resolved, old_items[1], {"outcome_md": "实测修复有效"}),
+        ):
+            options = {} if write_cli is None else {"cli": write_cli}
+            outcome = item("TODO", original_item["summary"], details={"status": "RESOLVED", **details},
+                           replaces_id=source["record_id"], refs=[record_ref(evidence["record_id"])])
+            receipt = self.save(operation, current_task, [outcome], **options)
+            self.assertEqual(self.save(operation, current_task, [outcome], **options), receipt)
+            updated, = receipt["result"]["records"]
+            old_record = self.call("record-get", source["record_id"])["result"]
+            new_record = self.call("record-get", updated["record_id"])["result"]
+            self.assertEqual((old_record["body_md"], old_record["details"]["status"], old_record["superseded_by"]),
+                             (original_item["body_md"], "OPEN", updated["record_id"]))
+            self.assertEqual(new_record["details"], outcome["details"])
+            self.assertEqual(new_record["replaces_id"], source["record_id"])
+            self.assertEqual(new_record["refs"][0]["target_record_id"], evidence["record_id"])
+            current_task = self.context(task)["task"]
+            self.assertEqual(current_task["completion"], done["completion"])
+            self.assertEqual(current_task["status"], "DONE")
+
+        self.assertEqual(self.call(*protocol, "snapshot"), before)
+        self.assertEqual(self.call(*protocol, *changes), baseline_changes)
+        evidence_ref = done["completion"]["evidence"][0]
+        self.assertEqual(self.call(evidence_ref["command"], evidence_ref["id"])["result"]["body_md"],
+                         original_evidence["body_md"])
+        self.write("task-reopen", "reopen-done", self.identity, task_id=task["task_id"],
+                   expected_revision=done["revision"], reason="继续跟进升级", evidence=CONFIRMATION)
+        after = self.context(task)
+        self.assertEqual(after["schema_version"], 4)
+        self.assertEqual(ids(after["todos"]), [remaining["record_id"]])
+        self.assertEqual(after["lifecycle_history"][0]["task"]["completion"], done["completion"])
 
 
 class CompleteReopenMigrationTest(ContextCase):

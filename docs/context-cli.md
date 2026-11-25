@@ -198,6 +198,12 @@ schema 4 的 `task-create` 可以附带 `priority`。省略该字段或传入 `n
 
 `result` 返回 `operation_id`、`committed_at`、`scope`、`task_id`、`context_position` 及 `records`（每项含 `record_id`、`position`、`kind`、`replaces_id`）。丢失回执时，原请求原样重试便可读回已保存结果。批次的记录、依据和回执同事务提交。上下文回执保存在独立的数据表中。`record` 推进上下文位置，旧任务 `revision` 和公开增量沿用原有规则。
 
+### 终态任务补记和待办处理
+
+`DONE` 和 `CANCELLED` 任务均可补记和更正进展，且拒绝写入状态为 `OPEN` 的任务级待办。已完成任务中，先用 `context --task` 核对原待办，用 `record-get` 读取原文。通过 `record` 的 `replaces_id` 关联原待办，提供 `refs` 依据。实际解决时使用 `details.status: "RESOLVED"` 和 `details.outcome_md`。转交等已确认处置另提供 `details.outcome_kind: "DISPOSED"`。Dashboard 和项目侧栏分别显示「已解决」或「已处置」与对应说明。
+
+用 `record-get` 可回查被替换的原文和 `details.status`，用任务的完成记录可回查原完成依据。已完成任务重开时，仍开放且有效的待办继续生效。已取消任务须先重开，由用户选定需要继续处理的原待办，再通过 `carry_forward_id` 带回。
+
 ## 合成项目复跑
 
 ```sh

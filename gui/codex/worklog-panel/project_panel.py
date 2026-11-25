@@ -100,6 +100,7 @@ def task_card(db, task, revision):
         "title": task["title"],
         "status": task["display_status"],
         "lifecycle": task["status"],
+        "blocked": task["blocked"],
         "revision": revision,
         "updatedAt": task["updated_at"],
         "progress": {
@@ -282,12 +283,15 @@ def todos_view(db, task, changes):
     for row in rows:
         key = row["record_id"]
         status = row["status"]
-        outcome = json.loads(row["details_json"]).get("outcome_md")
+        details = json.loads(row["details_json"])
+        outcome = details.get("outcome_md")
         if status == "OPEN":
             if key in dispositions and (task["status"] == "DONE" or key not in open_ids):
                 status, outcome = "DISPOSED", dispositions[key]
             elif key not in open_ids:
                 status = "INACTIVE"
+        elif status == "RESOLVED" and details.get("outcome_kind") == "DISPOSED":
+            status = "DISPOSED"
         item = {"summary": row["summary"], "status": status, "outcome": outcome}
         (open_items if status == "OPEN" else processed_items).append(item)
     return {"open": open_items, "processed": processed_items}
@@ -301,7 +305,7 @@ def history_view(db, task_id, changes):
     } for row in entry_refs(db, task_id)]
     rows = db.execute(
         "SELECT record_id, kind, scope, summary, recorded_at, client, session_id, superseded_by FROM context_index"
-        " WHERE (task_id = ? OR related_task_id = ?) AND kind IN ('PROGRESS', 'DECISION')",
+        " WHERE (task_id = ? OR related_task_id = ?) AND kind IN ('PROGRESS', 'DECISION', 'BLOCKER')",
         (task_id, task_id),
     )
     history.extend({
@@ -349,7 +353,7 @@ def read_history(cwd, task_id, source, record_id, expected_project, *, exact=Fal
         elif source == "record":
             row = db.execute(
                 "SELECT body_md FROM context_records WHERE (task_id = ? OR related_task_id = ?)"
-                " AND record_id = ? AND kind IN ('PROGRESS', 'DECISION')",
+                " AND record_id = ? AND kind IN ('PROGRESS', 'DECISION', 'BLOCKER')",
                 (task_id, task_id, record_id),
             ).fetchone()
             if row:

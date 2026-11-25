@@ -23,7 +23,7 @@ worklog_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/worklog-codex-install.XXXXXXXX")"
 trap 'rm -rf -- "$worklog_tmpdir"' EXIT
 
 archive="$worklog_tmpdir/$archive_name"
-release_url="https://github.com/LaudasMe/worklog/releases/download/$release_tag"
+release_url="https://github.com/floohubAI/worklog/releases/download/$release_tag"
 curl -fsSL --proto '=https' --proto-redir '=https' --output "$archive" "$release_url/$archive_name"
 
 downloaded_sha256="$(shasum -a 256 "$archive")"

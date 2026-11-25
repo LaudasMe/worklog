@@ -23,7 +23,7 @@ DETAILS = {
     "DOCUMENT": (("path", "purpose"), ("locator",)),
     "PROGRESS": (("processed_scope", "impacts"), ("suggested_next_step",)),
     "QUESTION": (("status",), ("outcome_md",)),
-    "TODO": (("status",), ("outcome_md",)),
+    "TODO": (("status",), ("outcome_md", "outcome_kind")),
     "BLOCKER": (("status", "blocked_work", "unblock_condition"), ("outcome_md",)),
 }
 REFERENCE_FIELDS = {
@@ -94,6 +94,8 @@ def details_for(item, kind):
         status = choice(details, "status", ACTION_STATES)
         if ("outcome_md" in details) != (status != "OPEN"):
             invalid("Closed records require outcome_md. OPEN records omit it.")
+        if "outcome_kind" in details and (status != "RESOLVED" or details["outcome_kind"] != "DISPOSED"):
+            invalid("outcome_kind can be DISPOSED only on a closed TODO with status RESOLVED.")
     return details
 
 
@@ -208,9 +210,14 @@ def add_record(db, scope, task, source, raw, saved, at):
     kind = choice(item, "kind", KINDS)
     summary, body = (string_field(item, key) for key in ("summary", "body_md"))
     details = details_for(item, kind)
-    refs = references_for(db, item.get("refs", []), saved)
+    if task is None and "outcome_kind" in details:
+        invalid("outcome_kind is available only for task TODOs.")
     if task is not None and kind in TASK_ACTIONS:
-        require_task_state(task, (*OPEN_TASK_STATES, "DONE"))
+        allowed_states = OPEN_TASK_STATES if kind == "TODO" and details["status"] == "OPEN" else (
+            *OPEN_TASK_STATES, "DONE",
+        )
+        require_task_state(task, allowed_states)
+    refs = references_for(db, item.get("refs", []), saved)
     if "carry_forward_id" in item:
         refs.append(carry_forward_ref(db, task, kind, details, item))
     if (kind in ("DECISION", "CONSTRAINT") or details.get("outcome_md")) and not refs:

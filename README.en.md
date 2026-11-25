@@ -23,7 +23,7 @@ Please install the workLog CLI and its general-purpose Skill on this computer. D
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing user-level installation, it keeps that version and shows its location. After installation, start a new chat and load the `worklog` Skill. [CLI and Skill release](https://github.com/floohubAI/worklog/releases/tag/v0.4.0) · [Manual installation and upgrades (Chinese)](docs/skill.md)
+The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing user-level installation, it keeps that version and shows its location. After installation, start a new chat and load the `worklog` Skill. [CLI and Skill release](https://github.com/floohubAI/worklog/releases/tag/v0.5.0) · [Manual installation and upgrades (Chinese)](docs/skill.md)
 
 ### GUI edition (Codex desktop)
 
@@ -33,10 +33,10 @@ Copy the entire block below into your Codex chat.
 
 ```text
 Please install the workLog Codex GUI on this Mac. Download the official installer below, run it with Bash, and tell me whether the installation succeeded.
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh
 ```
 
-Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.1.1 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
+Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.2.0 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ## Getting started
 

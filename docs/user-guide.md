@@ -2,7 +2,7 @@
 
 workLog 在项目里保存任务、待办、进展和交接记录。你可以在 Codex 记下做到哪里，再用 OpenCode 或另一个 Codex 聊天打开同一个项目，读回原文并继续工作。
 
-本指南适用于 **CLI／Skill v0.4.0** 和 **Codex GUI 0.1.1**。
+本指南适用于 **CLI／Skill v0.5.0** 和 **Codex GUI 0.2.0**。
 
 ## 1. 安装
 
@@ -11,16 +11,16 @@ workLog 在项目里保存任务、待办、进展和交接记录。你可以在
 准备支持本地插件的 Codex 桌面端和 Python 3.9 或以上版本。打开终端，执行下面的命令安装 Dashboard、项目侧栏及随包的 CLI 和 Skill。
 
 ```sh
-(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/install-codex.sh)" && /bin/bash -c "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
-脚本会下载并校验完整安装包。安装器提示是否替换旧版 Skill 或无法识别的 Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 0.1.1 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.1.1)
+脚本会下载并校验完整安装包。安装器提示是否替换现有 CLI／Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 0.2.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0)
 
-也可下载[完整安装包](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/worklog-codex-gui-v0.1.1-full.zip)和 [SHA-256 校验文件](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.1.1/SHA256SUMS)，用 `shasum -a 256 -c SHA256SUMS --ignore-missing` 核对已下载的 ZIP。解压后在包目录运行 `python3 -B install.py`。需要指定 Codex CLI 时，可追加 `--codex /absolute/path/to/codex`。
+也可下载[完整安装包](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/worklog-codex-gui-v0.2.0-full.zip)和 [SHA-256 校验文件](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/SHA256SUMS)，在下载目录运行 `shasum -a 256 -c SHA256SUMS --ignore-missing`。确认完整 ZIP 的校验结果为 `OK`，解压后在包目录运行 `python3 -B install.py`。需要指定 Codex CLI 时，可追加 `--codex /absolute/path/to/codex`。
 
 ### 在 OpenCode 或 Codex 中单独安装 Skill
 
-如果你使用 OpenCode，或者只需要聊天中的 workLog 操作，可以单独安装 Skill。准备 Python 3.9 或以上版本和 `unzip`，从发布页把 `worklog-skill-v0.4.0.zip` 和 `SHA256SUMS` 下载到同一目录。将以下两个路径换成实际绝对路径。 [CLI／Skill 发布页](https://github.com/LaudasMe/worklog/releases/tag/v0.4.0)
+如果你使用 OpenCode，或者只需要聊天中的 workLog 操作，可以单独安装 Skill。准备 Python 3.9 或以上版本和 `unzip`，从发布页把 `worklog-skill-v0.5.0.zip` 和 `SHA256SUMS` 下载到同一目录。将以下两个路径换成实际绝对路径。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.5.0)
 
 ```sh
 PROJECT_ROOT="/absolute/path/to/your-project"
@@ -30,7 +30,7 @@ SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 (cd "$DOWNLOAD_DIR" && shasum -a 256 -c SHA256SUMS) &&
   mkdir -p "$SKILLS_DIR" &&
   test ! -e "$SKILLS_DIR/worklog" &&
-  unzip -n "$DOWNLOAD_DIR/worklog-skill-v0.4.0.zip" -d "$SKILLS_DIR" &&
+  unzip -n "$DOWNLOAD_DIR/worklog-skill-v0.5.0.zip" -d "$SKILLS_DIR" &&
   python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" release-version
 ```
 
@@ -65,7 +65,9 @@ SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 
 侧栏支持 schema 4 的项目数据库，可添加任务、切换状态和确认完成。「全部」显示当前项目所有未归档任务。用聊天里的 Skill 保存进展后，点侧栏的「刷新」查看新结果。
 
-从 Codex 主侧栏应用列表打开 **workLog Dashboard**，可查看已登记项目的任务，并按项目和状态筛选。 [Codex GUI 安装](#在-macos-上安装-codex-gui)
+从 Codex 主侧栏应用列表打开 **workLog Dashboard**，可查看已登记项目的任务，并按项目和状态筛选。Dashboard 每页 20 条，项目侧栏每页 12 条。用列表底部的箭头翻页，切换筛选会回到第一页。 [Codex GUI 安装](#在-macos-上安装-codex-gui)
+
+两个入口的「继续任务」都会在项目管理目录打开可编辑的聊天草稿。发送预填草稿即授权该聊天跟进对应任务。整项任务完成仍需单独确认。
 
 ## 4. 管理任务状态、优先级和完成依据
 
@@ -122,7 +124,7 @@ python3 -B "$CLI" release-version
 python3 -B "$CLI" check-update
 ```
 
-`release-version` 返回安装包的发布版本，例如 `v0.4.0`。`--version` 返回 CLI 协议版本，例如 `2.0`。检查到新版本后，打开对应组件的 Release 链接手动安装。单独升级 Skill 时，先把新 ZIP 解压到临时目录，运行其中的 `scripts/worklog.py release-version` 核对版本，再替换实际使用的整套 Skill 目录并开启新聊天。 [Skill 安装与更新说明](skill.md)
+`release-version` 返回安装包的发布版本，例如 `v0.5.0`。`--version` 返回 CLI 协议版本，例如 `2.0`。检查到新版本后，打开对应组件的 Release 链接手动安装。单独升级 Skill 时，先把新 ZIP 解压到临时目录，运行其中的 `scripts/worklog.py release-version` 核对版本，再替换实际使用的整套 Skill 目录并开启新聊天。 [Skill 安装与更新说明](skill.md)
 
 ### 升级已有的项目数据库
 

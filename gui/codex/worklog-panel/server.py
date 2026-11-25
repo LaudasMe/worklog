@@ -13,7 +13,7 @@ from project_panel import (
     READ_ERRORS, PanelError, locate_project, read_handoff, read_history, registered_target,
     task_reader, task_sections, unavailable, view_dashboard, view_project,
 )
-from task_actions import ACTION_FIELDS, action_unavailable, completion_options, mutate_task
+from task_actions import ACTION_FIELDS, action_unavailable, blocker_options, completion_options, mutate_task
 from codex_skill_version import current_skill_version
 from worklog_release import check_update, read_release_version
 from worklog_store import TERMINAL_TASK_STATES
@@ -90,12 +90,19 @@ COMPLETION = app_tool(
     "read_worklog_completion_options", "读取完成任务的依据与待办", "读取任务的可用完成依据及开放事项。",
     {"taskId": IDENTIFIER, "expectedRevision": {"type": "integer", "minimum": 1}}, project=True,
 )
+BLOCKERS = app_tool(
+    "read_worklog_blocker_options", "读取任务阻塞", "核对接手归属并读取当前任务的生效阻塞。",
+    {"taskId": IDENTIFIER, "expectedRevision": {"type": "integer", "minimum": 1}}, project=True,
+)
 MUTATE = app_tool(
     "mutate_worklog_task", "保存任务操作", "按项目和任务版本校验并保存用户提交的任务操作。",
     {"command": {"type": "string", "enum": list(ACTION_FIELDS)}, "request": {"type": "object"}},
     project=True, write=True,
 )
-TOOLS = {tool["name"]: tool for tool in (TOOL, DASHBOARD, HANDOFF, SECTIONS, HISTORY, UPDATE, CONTINUE, COMPLETION, MUTATE)}
+TOOLS = {
+    tool["name"]: tool
+    for tool in (TOOL, DASHBOARD, HANDOFF, SECTIONS, HISTORY, UPDATE, CONTINUE, COMPLETION, BLOCKERS, MUTATE)
+}
 GUI_MANIFEST = Path(__file__).resolve().with_name("release-version.json")
 THREAD_BINDING_LOCK = Lock()
 
@@ -161,20 +168,22 @@ def prepare_continue(root, task, project_key):
         raise PanelError("任务已完成或取消。请刷新任务列表。", "terminal_task")
     path = json.dumps(str(root), ensure_ascii=False)
     prompt = (
-        f'请使用 workLog Skill 继续 {task["number"]}。'
+        f'请使用 workLog Skill 继续 {task["number"]}。我授权本聊天持续跟进这项任务，保存确认过的阶段进展、具体待办和阻塞。'
         f'请先核对当前聊天的实际工作目录（pwd -P）为 {path}，并用 workLog CLI 显式指定 --project {shell_quote(str(root))}。'
         f'核对项目 ID {project_key[0]}、数据代次 {project_key[1]} 和任务 ID {task["task_id"]}。'
-        '如目录或身份不符，请告知我并停止。核对一致后，读取任务的最新进展、下一步、待办和接手状态，'
-        '再按现有 workLog 流程接手。已有有效接手时，请先向我确认。'
+        '如目录或身份不符，请告知我并停止。核对一致后，读取任务的最新进展、下一步、待办、阻塞和接手状态。'
+        '有其他会话或客户端有效接手时，请先说明如何交接，待交接或我明确确认替换后再写入。'
     )
     query = urlencode({"path": str(root), "prompt": prompt}, quote_via=quote)
     return {"state": "ready", "url": f"codex://threads/new?{query}"}
 
 
 def task_operation(tool, params, panel, arguments):
-    root, project = target_project(params, panel, arguments.get("projectId"))
+    project_id = arguments.get("projectId")
+    root, project = target_project(params, panel, project_id)
+    source = ("codex-dashboard", "global") if project_id is not None else ("codex", panel["threadId"])
     if tool is MUTATE:
-        return mutate_task(root, project, arguments["command"], arguments["request"])
+        return mutate_task(root, project, arguments["command"], arguments["request"], source=source)
     task_id = arguments["taskId"]
     if tool is HANDOFF:
         return read_handoff(root, task_id, arguments["entryId"], project, exact=True)
@@ -185,6 +194,8 @@ def task_operation(tool, params, panel, arguments):
     with task_reader(root, task_id, project, exact=True) as (db, task):
         if tool is CONTINUE:
             return prepare_continue(root, task, project)
+        if tool is BLOCKERS:
+            return blocker_options(db, task, arguments["expectedRevision"], source)
         return completion_options(db, task, arguments["expectedRevision"])
 
 
@@ -213,7 +224,8 @@ def read_panel(params, panel):
         else:
             data = task_operation(tool, params, panel, arguments)
     except READ_ERRORS as error:
-        if tool is COMPLETION and getattr(error, "code", None) == "revision_conflict":
+        if ((tool is COMPLETION and getattr(error, "code", None) == "revision_conflict")
+                or (tool is BLOCKERS and not isinstance(error, PanelError))):
             data = action_unavailable(error)
         else:
             data = unavailable(error)
