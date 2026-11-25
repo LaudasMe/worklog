@@ -66,15 +66,11 @@ Start a chat from your project's root directory and load the `worklog` Skill. If
 
 ## Screenshots
 
-These screenshots show the panels from the Codex GUI 0.2.0 release with sample order-reconciliation data in the Chinese interface.
+The Dashboard and project sidebar from the Codex GUI 0.2.0 release, shown with sample order-reconciliation data in the Chinese interface.
 
-### Dashboard
+[![The workLog Dashboard task list and pagination on the left, and project sidebar task details and to-dos on the right](docs/images/codex-panels.png)](docs/images/codex-panels.png)
 
-<img src="docs/images/codex-dashboard.png" alt="workLog Dashboard showing project filters, the task list, and pagination at 20 tasks per page" width="1024">
-
-### Project sidebar
-
-<img src="docs/images/codex-task-panel.png" alt="workLog project sidebar showing progress, the Continue task button, and disposed and resolved to-dos" width="442">
+[Original Dashboard screenshot](docs/images/codex-dashboard.png) · [Original project sidebar screenshot](docs/images/codex-task-panel.png)
 
 ## Documentation
 
