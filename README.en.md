@@ -10,6 +10,13 @@ workLog turns information scattered across your chats with an agent into tasks, 
 - **Track progress by task.** Save results, decisions, updates to to-dos, and next steps under the relevant task. Use the task ID to find its history and evidence of completion later.
 - **Keep project data local.** Each project has its own SQLite database in `.worklog/` at the project root. The CLI can run on its own and provides a read-only interface for other tools.
 
+## What's new in GUI 0.2.0 and CLI / Skill v0.5.0
+
+- **Pick up work in a new chat.** Authorize workLog to follow one or more tasks in Codex. A new chat can read saved progress, to-dos, and blockers, then save its own results with their source. Completing the whole task still requires a separate confirmation.
+- **Manage blockers and to-dos from either panel.** Set and clear blockers one at a time in the Dashboard or project sidebar. Both show to-do outcomes and their explanations. Recording an outcome for an older to-do preserves the original entry and completion evidence.
+- **Browse and filter by page.** The Dashboard shows 20 tasks per page, and the project sidebar shows 12. Changing a filter returns to page one. Adding a task opens the page that contains it.
+- **Read history and upgrade.** Open history entries with the mouse or keyboard. If GUI installation fails, the installer restores the previous plugin installation and enabled state. Existing schema 4 projects still work with read-only protocol 2.0.
+
 ## Installation
 
 Choose an edition and paste its installation prompt into an agent client that can run commands on your computer.
@@ -49,17 +56,25 @@ Start a chat from your project's root directory and load the `worklog` Skill. If
 
 ### 2. Update a task
 
-- **CLI edition.** When you have new results, say “Use workLog to update T001.” Replace `T001` with the task ID that workLog returned.
-- **GUI edition.** Send the same request in Codex. Once the update is saved, click **Refresh** (`刷新`) in the sidebar to check the progress, to-dos, and next step.
+- **CLI edition.** When you have new results, say “Use workLog to update T001. The zero-amount orders are verified. Next, spot-check the refunds.” Replace `T001` with the task ID that workLog returned.
+- **GUI edition.** Click **Continue task** (`继续任务`) in the Dashboard or project sidebar to open an editable chat draft in the project's workLog directory. Send the prefilled draft to authorize that chat to follow the task. Click **Refresh** (`刷新`) after saving an update.
 
 ### 3. View a task
 
 - **CLI edition.** Say “Use workLog to show the progress, open to-dos, and next step for T001.” If you don't know the task ID yet, ask “Which tasks are still open in this project?”
 - **GUI edition.** In a local Codex chat, open the right sidebar and select **+ → More tools → Plugins and MCP → workLog 项目侧栏** (workLog Project Sidebar). Filter tasks by status and expand a task to see its to-dos and history. [Open the sidebar (Chinese)](docs/user-guide.md#3-在-codex-侧栏查看任务)
 
-<img src="docs/images/codex-task-panel.png" alt="Codex sidebar showing progress, to-dos, and history for the order verification task" width="452">
+## Screenshots
 
-*Codex task sidebar with sample data in the Chinese interface.*
+These screenshots show the panels from the Codex GUI 0.2.0 release with sample order-reconciliation data in the Chinese interface.
+
+### Dashboard
+
+<img src="docs/images/codex-dashboard.png" alt="workLog Dashboard showing project filters, the task list, and pagination at 20 tasks per page" width="1024">
+
+### Project sidebar
+
+<img src="docs/images/codex-task-panel.png" alt="workLog project sidebar showing progress, the Continue task button, and disposed and resolved to-dos" width="442">
 
 ## Documentation
 
