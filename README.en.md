@@ -68,7 +68,7 @@ Start a chat from your project's root directory and load the `worklog` Skill. If
 
 The Dashboard and project sidebar from the Codex GUI 0.2.0 release, shown with sample order-reconciliation data in the Chinese interface.
 
-[![The workLog Dashboard task list and pagination on the left, and project sidebar task details and to-dos on the right](docs/images/codex-panels.png)](docs/images/codex-panels.png)
+[![Side-by-side view of the workLog Dashboard task list and pagination and the project sidebar task details and to-dos](docs/images/codex-panels.png)](docs/images/codex-panels.png)
 
 [Original Dashboard screenshot](docs/images/codex-dashboard.png) · [Original project sidebar screenshot](docs/images/codex-task-panel.png)
 

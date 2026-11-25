@@ -68,7 +68,7 @@ https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-
 
 Codex GUI 0.2.0 正式包的 Dashboard 和项目侧栏，使用订单对账示例数据。
 
-[![左侧是 workLog Dashboard 的任务列表和分页，右侧是项目侧栏中的任务详情与待办](docs/images/codex-panels.png)](docs/images/codex-panels.png)
+[![并排展示 workLog Dashboard 的任务列表与分页，以及项目侧栏的任务详情与待办](docs/images/codex-panels.png)](docs/images/codex-panels.png)
 
 [Dashboard 原图](docs/images/codex-dashboard.png) · [项目侧栏原图](docs/images/codex-task-panel.png)
 
