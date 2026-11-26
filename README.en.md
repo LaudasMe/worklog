@@ -58,7 +58,7 @@ The plugin supports DSH Desktop 0.2.2-rc.5. Download the standalone package and 
 
 ### OpenCode desktop plugin
 
-OpenCode Desktop 2.4.1 supports the standalone workLog GUI. Install CLI / Skill v0.6.0 before registering the OpenCode plugin. [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [Installation guide (Chinese)](gui/opencode/README.md)
+OpenCode Desktop 2.4.2 supports the standalone workLog GUI. Install CLI / Skill v0.6.0 before registering the OpenCode plugin. [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [Installation guide (Chinese)](gui/opencode/README.md)
 
 ## Getting started
 

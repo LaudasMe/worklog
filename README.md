@@ -58,7 +58,7 @@ https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-
 
 ### OpenCode 桌面插件
 
-OpenCode Desktop 2.4.1 可安装独立的 workLog GUI。先安装 CLI／Skill v0.6.0，再注册 OpenCode 插件。 [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [安装步骤](gui/opencode/README.md)
+OpenCode Desktop 2.4.2 可安装独立的 workLog GUI。先安装 CLI／Skill v0.6.0，再注册 OpenCode 插件。 [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [安装步骤](gui/opencode/README.md)
 
 ## 三个使用场景
 
