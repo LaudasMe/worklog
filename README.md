@@ -56,6 +56,10 @@ https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-
 
 使用 DSH Desktop 0.2.2-rc.5。下载独立安装包，按插件说明通过随附的 `dsh` 安装。 [DSH 插件 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [安装步骤](plugins/dsh/README.md)
 
+### OpenCode 桌面插件
+
+OpenCode Desktop 2.4.1 可安装独立的 workLog GUI。先安装 CLI／Skill v0.6.0，再注册 OpenCode 插件。 [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [安装步骤](gui/opencode/README.md)
+
 ## 三个使用场景
 
 先从项目根目录开启聊天，加载 `worklog` Skill。如果项目是第一次使用 workLog，先说「为当前项目初始化 workLog。」
