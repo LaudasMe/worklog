@@ -56,6 +56,10 @@ Restart Codex when the installation finishes. Open **workLog Dashboard** from th
 
 The plugin supports DSH Desktop 0.2.2-rc.5. Download the standalone package and use the bundled `dsh` command to install it. [DSH plugin 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [Installation guide (Chinese)](plugins/dsh/README.md)
 
+### OpenCode desktop plugin
+
+OpenCode Desktop 2.4.2 supports the standalone workLog GUI. Install CLI / Skill v0.6.0 before registering the OpenCode plugin. [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [Installation guide (Chinese)](gui/opencode/README.md)
+
 ## Getting started
 
 Start a chat from your project's root directory and load the `worklog` Skill. If this is the first time using workLog in the project, say “Initialize workLog for this project.”
