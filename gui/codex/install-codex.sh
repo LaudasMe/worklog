@@ -7,11 +7,12 @@ archive_name='@ARCHIVE_NAME@'
 archive_sha256='@ARCHIVE_SHA256@'
 
 if [[ "$archive_sha256" == @* ]]; then
-    printf '%s\n' '请执行 GitHub Release 附件中的 install-codex.sh。' >&2
+    printf '%s\n' '请从 Codex GUI 的 GitHub Release 下载 install-codex.sh 后运行。' >&2
+    printf '%s\n' 'https://github.com/floohubAI/worklog/releases' >&2
     exit 1
 fi
 if [[ "$(uname -s)" != Darwin ]]; then
-    printf '%s\n' 'workLog Codex 侧栏安装脚本支持 macOS。' >&2
+    printf '%s\n' 'workLog Codex GUI 安装脚本支持 macOS。' >&2
     exit 1
 fi
 if ! command -v python3 >/dev/null || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then

@@ -6,11 +6,12 @@ if ! command -v python3 >/dev/null; then
     exit 1
 fi
 
-python3 -B - <<'PYTHON'
+python3 -B - "$@" <<'PYTHON'
 import fcntl
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -23,6 +24,16 @@ version = "v0.6.0"
 archive_name = f"worklog-skill-{version}.zip"
 archive_sha256 = "2f1d8328c1ef3d58c5218f099fc0d0ca5cb17900da0c1544d8cd5cfdd2eebd47"
 archive_url = f"https://github.com/floohubAI/worklog/releases/download/{version}/{archive_name}"
+guide_url = "https://github.com/floohubAI/worklog/blob/main/docs/user-guide.md#6-检查更新与升级"
+
+if sys.argv[1:] == ["--help"]:
+    print(f"首次安装 workLog CLI／Skill {version} 到 ~/.agents/skills/worklog。")
+    print("用法：bash install-cli.sh [--help]")
+    print(f"已有安装会保留。升级步骤：{guide_url}")
+    sys.exit(0)
+if len(sys.argv) != 1:
+    sys.exit("不支持该参数。请运行 bash install-cli.sh --help。")
+
 user_home = Path.home()
 skills_dir = user_home / ".agents/skills"
 skill = skills_dir / "worklog"
@@ -39,7 +50,11 @@ try:
                 sys.exit(f"发现中断的安装备份：{backup}。请先恢复原安装。")
             if os.path.lexists(installed):
                 print(f"已保留现有 CLI／Skill：{installed}")
+                print(f"如需升级，请按指南核对并替换当前安装：{guide_url}")
                 sys.exit(0)
+
+        if shutil.which("curl") is None:
+            sys.exit("首次安装需要 curl 来下载发布包。安装 curl 后重试。")
 
         with TemporaryDirectory(prefix=".worklog-install-", dir=skills_dir) as temporary:
             staging = Path(temporary)

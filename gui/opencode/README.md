@@ -1,33 +1,34 @@
 # workLog OpenCode GUI
 
-适配目标为 OpenCode Desktop `2.4.1`。Dashboard 和项目侧栏使用本机 `~/.agents/skills/worklog/` 下的共享页面、配置和操作桥。项目侧栏随 OpenCode 内置服务的本机会话定位项目。
-
-## 构建候选包
-
-在代码仓根目录运行 `npm pack --ignore-scripts ./gui/opencode`。生成的 `worklog-opencode-gui-0.1.0.tgz` 可离线解包。该包只有 GUI 适配器。先安装包含共享前端的 workLog CLI／Skill `v0.6.0`，再安装 GUI。
+OpenCode GUI `0.1.0` 已在 macOS arm64 的 OpenCode Desktop `2.4.2` 验证。Dashboard 和项目侧栏使用本机 `~/.agents/skills/worklog/` 下的共享页面、配置和操作桥。项目侧栏根据本地会话目录定位项目。
 
 ## 安装
 
-1. 验证已安装 Skill 的共享资源及兼容性。
+1. 安装通用 CLI／Skill `v0.6.0` 到 `~/.agents/skills/worklog/`，然后核对版本并验证共享资源。如果通用脚本只识别到 Codex 旧路径，按手动步骤安装到这里。 [手动安装 Skill](https://github.com/floohubAI/worklog/blob/main/docs/user-guide.md#手动安装-skill)
 
    ```sh
    root="$HOME/.agents/skills/worklog"
-   for surface in dashboard project; do
-     python3 -B "$root/scripts/panel_assets.py" --skill "$root" --surface "$surface" >/dev/null || exit 1
-   done
+   (python3 -B "$root/scripts/worklog.py" release-version &&
+     for surface in dashboard project; do
+       python3 -B "$root/scripts/panel_assets.py" --skill "$root" --surface "$surface" >/dev/null || exit 1
+     done)
    ```
 
    检查失败时更新 Skill 后重试。缺少资源、摘要不匹配和契约版本不受支持都会使页面停止加载。
-2. 将 `.tgz` 解包到固定位置，保留包内 `package/` 根目录。
-3. 在 OpenCode 的用户级 `opencode.json` 或 `opencode.jsonc` 的 `plugins` 数组中追加解包后的 `package/` **绝对路径**。保留已有配置。
+2. 下载 `worklog-opencode-gui-0.1.0.tgz` 和同页的 `SHA256SUMS`。在下载目录运行 `shasum -a 256 -c SHA256SUMS`。校验通过后，将 TGZ 解包到固定位置，保留包内的 `package/` 根目录。 [OpenCode GUI 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0)
+3. 在 OpenCode 的用户级配置目录 `~/.config/opencode/` 编辑实际使用的 `opencode.json` 或 `opencode.jsonc`。首次配置时可创建 `opencode.json`。在 `plugins` 数组登记解包后 `package/` 的**绝对路径**，保留其余配置。升级时替换原有 workLog 条目的路径。
 
    ```json
    { "plugins": ["/absolute/path/to/extracted/package"] }
    ```
 
-4. 重启 OpenCode Desktop。点击标题栏中的 **workLog Dashboard**，也可以通过命令面板打开。聊天内从右侧栏的「+」菜单选择 **workLog 项目侧栏**。
+4. 重启 OpenCode Desktop。主页没有聊天时，也可以从标题栏打开 **workLog Dashboard**。在本地聊天中，从右侧栏的「+」菜单选择 **workLog 项目侧栏**。
 
 卸载时从 `plugins` 删除该路径并重启。任务和记录继续保存在原 workLog 项目中。
+
+## 构建候选包
+
+在代码仓根目录运行 `npm pack --ignore-scripts ./gui/opencode`。生成的 `worklog-opencode-gui-0.1.0.tgz` 可离线解包。
 
 ## 隔离桌面验收
 
