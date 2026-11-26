@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hans" data-surface="project">
+<html data-surface="project">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>workLog</title>
@@ -104,6 +104,7 @@
   }
   .icon-button:not(:disabled):hover { background: var(--selected); }
   .filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 9px; }
+  #priority-filters { margin-top: -4px; }
   .filter {
     display: inline-flex;
     align-items: center;
@@ -120,6 +121,7 @@
   .filter[aria-pressed="true"] { color: var(--accent); font-weight: 600; background: var(--selected); border-color: var(--selected-border); }
   .filter .icon { width: 12px; height: 12px; color: var(--status-color, var(--muted)); }
   .filter .count { font-size: 11px; }
+  .filter .priority-mark { padding: 0; min-width: 15px; height: auto; background: none; border: 0; }
   .pagination {
     display: flex;
     flex: none;
@@ -158,7 +160,7 @@
   .task + .task, .group-heading + .task-rows:not(:empty) { border-top: 1px solid var(--line); }
   .group-note { padding: 8px 9px; }
   .task-heading {
-    --task-prefix: 12px max(34px, var(--task-number-width)) 29px;
+    --task-prefix: 12px max(34px, var(--task-number-width)) 29px 29px;
     --task-gap: 6px;
     display: grid;
     grid-template-columns: var(--task-prefix) minmax(0, 1fr) 68px;
@@ -168,7 +170,7 @@
   }
   .task-toggle {
     grid-row: 1;
-    grid-column: 1 / 6;
+    grid-column: 1 / 7;
     display: grid;
     grid-template-columns: var(--task-prefix) minmax(0, 1fr) 68px;
     align-items: center;
@@ -183,11 +185,11 @@
   .task-toggle > .icon-chevron { width: 10px; color: var(--muted); }
   [aria-expanded="true"] > .icon-chevron { rotate: 90deg; }
   .task-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11.5px; font-weight: 400; }
-  .task-title { grid-column: 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 500; }
+  .task-title { grid-column: 5; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 500; }
   .task-toggle[aria-expanded="true"] .task-title { overflow-wrap: anywhere; white-space: normal; font-weight: 600; }
   .task-status {
     grid-row: 1;
-    grid-column: 3;
+    grid-column: 4;
     z-index: 1;
     display: inline-flex;
     align-items: center;
@@ -204,9 +206,58 @@
   .task-status:disabled { opacity: 1; }
   .task-status .icon { width: 14px; height: 14px; }
   .caret { width: 4px; height: 4px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .task-priority {
+    grid-area: 1 / 3;
+    z-index: 1;
+    display: inline-grid;
+    place-items: center;
+    min-height: 27px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+  }
+  .task-priority:not(:disabled):hover, .task-priority[aria-expanded="true"] {
+    border-color: var(--line);
+    background: var(--page);
+  }
+  .task-priority:disabled { opacity: 1; }
+  .priority-mark {
+    display: inline-grid;
+    place-items: center;
+    min-width: 23px;
+    height: 20px;
+    padding-inline: 2px;
+    color: var(--priority-ink, var(--muted));
+    background: var(--priority-bg, var(--surface));
+    border: 1px solid var(--priority-line, var(--line));
+    border-radius: 4px;
+    font: 650 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  [data-priority="p0"] {
+    --priority-ink: light-dark(#982f40, #ffb2be);
+    --priority-bg: light-dark(#fff0f2, #442630);
+    --priority-line: light-dark(#edc4cb, #79424e);
+  }
+  [data-priority="p1"] {
+    --priority-ink: light-dark(#805116, #f6cb8b);
+    --priority-bg: light-dark(#fff4e4, #422f1c);
+    --priority-line: light-dark(#eacfa9, #6a4e32);
+  }
+  [data-priority="p2"] {
+    --priority-ink: var(--accent);
+    --priority-bg: var(--selected);
+    --priority-line: var(--selected-border);
+  }
+  .priority-mark .icon { width: 13px; }
+  .priority-fact { display: flex; gap: 6px; padding-inline: 9px; align-items: baseline; }
+  #status-menu.priority-menu { min-width: 0; width: 63px; }
+  .status-menu.priority-menu button { display: flex; align-items: center; gap: 6px; padding-inline: 4px; }
+  .priority-menu button[aria-checked="true"] { background: var(--selected); }
+  .priority-menu button > .icon { width: 13px; color: var(--accent); }
   .task-updated {
     grid-row: 1;
-    grid-column: 5;
+    grid-column: 6;
     text-align: end;
     white-space: nowrap;
     pointer-events: none;
@@ -358,7 +409,7 @@
   [data-status="DONE"] { --status-color: light-dark(#2e7458, #82d0ad); }
   [data-status="CANCELLED"] { --status-color: light-dark(#77578d, #c4a6df); }
   @media (max-width: 440px) {
-    .task-heading { --task-prefix: 10px max(32px, var(--task-number-width)) 29px; --task-gap: 5px; }
+    .task-heading { --task-prefix: 10px max(32px, var(--task-number-width)) 29px 29px; --task-gap: 5px; }
     .task-heading, .task-toggle { grid-template-columns: var(--task-prefix) minmax(0, 1fr) 34px; }
     .task-clock { display: none; }
   }
@@ -376,7 +427,7 @@
     .filter .icon { width: 10px; height: 10px; }
   }
   @media (pointer: coarse) {
-    :is(.icon-button, .filter, .task-toggle, .task-status, .section-toggle, .history-toggle, .processed-toggle) { min-height: 44px; }
+    :is(.icon-button, .filter, .task-toggle, .task-priority, .task-status, .section-toggle, .history-toggle, .processed-toggle) { min-height: 44px; }
     .icon-button, .page-controls .icon-button { width: 44px; min-height: 44px; }
   }
 </style>
@@ -389,6 +440,8 @@
   <symbol id="icon-paused" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6m4-6v6"/></symbol>
   <symbol id="icon-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></symbol>
   <symbol id="icon-cancelled" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+  <symbol id="icon-unset-priority" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
   <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="icon-progress" viewBox="0 0 24 24"><path d="M2 12h4L9 3l5 18 3-9h5"/></symbol>
   <symbol id="icon-next" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
@@ -427,6 +480,7 @@
       </div>
     </header>
     <div id="filters" class="filters" role="group" aria-label="按状态筛选任务"></div>
+    <div id="priority-filters" class="filters" role="group" aria-label="按优先级筛选任务"></div>
     <div id="task-list-viewport" tabindex="0" role="region" aria-label="任务列表滚动区">
       <div id="tasks"></div>
       <div id="tasks-empty" class="tasks-empty" hidden>
@@ -469,11 +523,13 @@
         <span class="task-number"></span>
         <span class="task-title"></span>
       </button>
+      <button type="button" class="task-priority" aria-haspopup="menu" aria-expanded="false" aria-controls="status-menu"></button>
       <button type="button" class="task-status" aria-expanded="false" aria-controls="status-menu"></button>
       <time class="task-updated" hidden><span class="task-day"></span><span class="task-clock"></span></time>
     </div>
     <section class="task-detail" aria-label="任务详情" hidden>
       <div class="facts">
+        <div class="priority-fact"><h3 class="fact-key">优先级</h3><span class="priority-value"></span></div>
         <div class="progress">
           <div class="progress-heading">
             <h3 class="fact-key">当前进展</h3>
@@ -606,6 +662,328 @@
   </section>
 </template>
 <script>
+  const english = Object.freeze({
+    "刷新任务列表": "Refresh task list",
+    "刷新": "Refresh",
+    "检查更新": "Check for updates",
+    "更新检查结果": "Update check results",
+    "正在读取 workLog 任务…": "Loading workLog tasks…",
+    "重试读取任务": "Retry loading tasks",
+    "任务列表": "Tasks",
+    "项目": "Project",
+    "筛选项目": "Filter by project",
+    "添加任务": "Add task",
+    "按状态筛选任务": "Filter tasks by status",
+    "按优先级筛选任务": "Filter tasks by priority",
+    "任务列表滚动区": "Scrollable task list",
+    "查看全部任务": "Show all tasks",
+    "任务列表分页": "Task list pagination",
+    "共": "Total",
+    "条": "tasks",
+    "上一页": "Previous page",
+    "下一页": "Next page",
+    "第": "Page",
+    "页": "",
+    "关闭": "Close",
+    "任务详情": "Task details",
+    "优先级": "Priority",
+    "当前进展": "Current progress",
+    "下一步": "Next step",
+    "上次交接": "Last handoff",
+    "查看交接原文": "View handoff",
+    "收起交接原文": "Hide handoff",
+    "交接原文": "Handoff text",
+    "重试": "Retry",
+    "交接时的下一步": "Next step at handoff",
+    "重试读取任务详情": "Retry loading task details",
+    "待办": "To-do items",
+    "暂无未完成待办": "No open to-do items",
+    "未完成待办": "Open to-do items",
+    "已处理待办": "Processed to-do items",
+    "全部历史": "All history",
+    "暂无历史记录": "No history",
+    "历史记录，时间倒序": "History, newest first",
+    "参与会话": "Participating chats",
+    "已被替换": "Superseded",
+    "当前使用版本": "Installed version",
+    "最新正式版": "Latest release",
+    "更新状态": "Update status",
+    "查看 GitHub Release": "View GitHub Release",
+    "未完成": "Open",
+    "全部": "All",
+    "待开始": "To do",
+    "进行中": "In progress",
+    "受阻": "Blocked",
+    "已暂停": "Paused",
+    "已完成": "Done",
+    "已取消": "Cancelled",
+    "项目总览": "Project overview",
+    "进展": "Progress",
+    "交接": "Handoff",
+    "决策": "Decision",
+    "阻塞": "Blocker",
+    "状态变更": "Status change",
+    "接手任务": "Claimed task",
+    "任务已归档": "Archived task",
+    "任务已恢复显示": "Restored task to list",
+    "待处理": "Open",
+    "已解决": "Resolved",
+    "已处置": "Disposed",
+    "已失效": "Inactive",
+    "有可用更新": "Update available",
+    "已是最新正式版": "Up to date",
+    "高于最新正式版": "Newer than the latest release",
+    "无法判断": "Unknown",
+    "尚未收到 workLog 数据。请尝试重新打开面板。": "No workLog data received. Try reopening the panel.",
+    "添加第一个项目": "Add your first project",
+    "当前聊天未找到 workLog 项目": "No workLog project found for this chat",
+    "在项目根目录打开 Codex 本地聊天，选中 ": "Open a local chat in the project root and select the ",
+    "在项目管理目录的 Codex 本地聊天中，选中 ": "In a local chat in the project management directory, select the ",
+    " 后发送提示词。": ", then send this prompt.",
+    "请为本项目初始化worklog。": "Use the workLog Skill to initialize workLog for this project.",
+    "复制启用提示词": "Copy setup prompt",
+    "启用后回到这里点「刷新」。": "Then return here and select Refresh.",
+    "启用后在该聊天打开项目侧栏，或点「重试读取任务」。": "Then open the Project Sidebar in that chat, or select Retry loading tasks.",
+    "已复制。": "Copied. ",
+    "已选中提示词，请手动复制。": "Prompt selected. Copy it manually. ",
+    "Codex 未能返回此项结果，请重试。": "The host did not return a result. Try again.",
+    "请求超时，请重试。": "The request timed out. Try again.",
+    "正在读取原文…": "Loading original text…",
+    "无法读取原文。": "Could not load the original text.",
+    "状态未知": "Unknown state",
+    "任务记录": "Task record",
+    " · 项目关联记录": " · Linked project record",
+    "项目关联记录": "Linked project record",
+    "这条历史记录没有原文。": "This history entry has no original text.",
+    "正在读取待办和历史…": "Loading to-do items and history…",
+    "无法读取待办和历史。": "Could not load to-do items and history.",
+    "未完成 ": "Open: ",
+    " 项": " items",
+    " 条": " records",
+    "已处理 · ": "Processed · ",
+    "P0 最高": "P0 Highest",
+    "P1 高": "P1 High",
+    "P2 常规": "P2 Normal",
+    "P3 低": "P3 Low",
+    "未设置": "Unset",
+    "未知状态": "Unknown status",
+    " 优先级：": " priority: ",
+    "，切换状态": ", change status",
+    "暂无进展": "No progress yet",
+    "来源会话 ": "Source chat ",
+    "暂无下一步": "No next step",
+    "继续任务 ": "Continue task ",
+    "Codex 未能打开新聊天。请重新读取任务后重试。": "Codex could not open a new chat. Refresh tasks and try again.",
+    "无法准备新聊天，请重试。": "Could not prepare a new chat. Try again.",
+    "暂无交接摘要": "No handoff summary",
+    "暂无交接记录": "No handoff recorded",
+    "这条交接没有记录原文。": "This handoff has no original text.",
+    "全部优先级": "All priorities",
+    "无法读取此项目。请检查登记后刷新。": "Could not read this project. Verify its registration and refresh.",
+    "该筛选范围内暂无任务。": "No tasks match these filters.",
+    "此项目还没有任务。": "This project has no tasks yet.",
+    "当前筛选下暂无任务。": "No tasks match these filters.",
+    "无法读取 workLog 任务，请重试。": "Could not read workLog tasks. Try again.",
+    "Codex 返回的任务数据格式不正确。请尝试重新打开面板。": "The host returned invalid task data. Try reopening the panel.",
+    "全部项目": "All projects",
+    "已刷新任务。": "Tasks refreshed.",
+    "正在刷新任务…": "Refreshing tasks…",
+    "读取到「": "Loaded “",
+    "」。": "”.",
+    "开始": "Start",
+    "暂停": "Pause",
+    "恢复": "Resume",
+    "完成": "Complete",
+    "取消任务": "Cancel task",
+    "重新打开": "Reopen",
+    "设为受阻": "Mark blocked",
+    "解除阻塞": "Resolve blocker",
+    "选择任务优先级": "Choose task priority",
+    "添加": "Add",
+    "请选择项目": "Select a project",
+    "所属项目": "Project",
+    "任务标题": "Task title",
+    "请选择所属项目。": "Select the project for this task.",
+    "请填写任务标题。": "Enter a task title.",
+    "确认取消任务": "Confirm cancellation",
+    "确认重新打开": "Confirm reopen",
+    "原因": "Reason",
+    "请填写原因。": "Enter a reason.",
+    "确认解除": "Resolve blocker",
+    "确认设置": "Set blocker",
+    "正在核对任务和接手状态…": "Checking task and claim details…",
+    "刷新任务": "Refresh tasks",
+    "任务已没有生效阻塞。请刷新列表。": "The task has no active blockers. Refresh the list.",
+    "受阻事项：": "Blocked work: ",
+    "解除条件：": "Unblock condition: ",
+    "要解除的阻塞": "Blocker to resolve",
+    "解除说明": "Resolution",
+    "受阻事项及原因": "Blocked work and reason",
+    "解除条件": "Unblock condition",
+    "请选择要解除的阻塞。": "Select the blocker to resolve.",
+    "请填写受阻事项及原因。": "Enter the blocked work and reason.",
+    "请填写解除说明。": "Enter the resolution.",
+    "请填写解除条件。": "Enter the unblock condition.",
+    "完成任务": "Complete task",
+    "确认完成": "Confirm completion",
+    "正在读取完成依据和待办…": "Loading completion evidence and to-do items…",
+    "重试读取完成依据": "Retry loading completion evidence",
+    "暂无符合规则的已保存进展或交接": "No eligible progress or handoff is saved",
+    "完成范围": "Completed scope",
+    "完成依据": "Completion evidence",
+    "开放待办及处置": "Open to-do items and dispositions",
+    "将首条说明填入其他空项": "Copy the first disposition to the remaining blank items",
+    "未解除的任务级阻塞：": "Unresolved task blockers: ",
+    "、": ", ",
+    "请先保存至少一条符合完成规则的进展或交接。": "Save at least one eligible progress record or handoff first.",
+    "请填写完成范围。": "Enter the completed scope.",
+    "请选择有效的完成依据。": "Select eligible completion evidence.",
+    "请填写每条开放待办的处置说明。": "Enter a disposition for every open to-do item.",
+    "正在保存任务…": "Saving task…",
+    "重试原请求": "Retry the same request",
+    "已添加 ": "Added ",
+    "。": ".",
+    "已保存任务优先级。": "Task priority saved.",
+    "已设置阻塞。": "Blocker set.",
+    "已解除所选阻塞。": "Selected blocker resolved.",
+    "已保存任务状态。": "Task status saved.",
+    "任务写入失败。": "Task could not be saved.",
+    "重试检查 ": "Retry update check for ",
+    "正在检查更新…": "Checking for updates…",
+    "当前使用版本无法确认": "Installed version could not be verified",
+    "无法识别": "Unrecognized",
+    "暂无可确认的正式版": "No confirmed release",
+    "检查更新失败。": "Could not check for updates.",
+    "Codex 无法直接打开此链接。可复制地址 ": "The host could not open this link. Copy the address: ",
+    "无法连接 Codex 面板。请尝试重新打开面板。": "Could not connect to the host. Try reopening the panel.",
+    "请补齐必填项并核对输入后重试。": "Check the required fields and try again.",
+    "所选完成依据已失效或不属于这项任务。请刷新后重新选择。": "The selected completion evidence is unavailable for this task. Refresh and select it again.",
+    "存在未解除的任务级阻塞。请处理阻塞后再确认完成。": "Resolve the task blockers before completing the task.",
+    "请刷新任务，并为每条当前开放的待办填写处置说明。": "Refresh the task and enter a disposition for each open to-do item.",
+    "任务已变化。请刷新列表后重新确认本次操作。": "The task has changed. Refresh the list and confirm the operation again.",
+    "另一会话正在接手此任务。请先在该会话完成交接，再刷新任务并操作阻塞。": "Another chat owns this task. Hand it off there, then refresh before editing its blockers.",
+    "任务的接手状态已变化。请刷新列表后重新确认本次操作。": "The task's claim has changed. Refresh the list and confirm the operation again.",
+    "这条阻塞已变化。请刷新列表后重新选择。": "This blocker has changed. Refresh and select it again.",
+    "这条阻塞已不可用。请刷新列表后重新选择。": "This blocker is unavailable. Refresh and select it again.",
+    "任务当前状态不支持此操作。请刷新列表。": "The task's current status does not allow this operation. Refresh the list.",
+    "任务已不可用。请刷新列表。": "The task is unavailable. Refresh the list.",
+    "这次操作编号已用于其他请求。请刷新列表后重试。": "This operation ID was used for another request. Refresh the list and try again.",
+    "项目身份已变化。请核对项目登记并刷新列表。": "The project identity has changed. Verify its registration and refresh the list.",
+    "项目数据已更换。请刷新列表后重试。": "The project data has changed. Refresh the list and try again.",
+    "当前数据库版本不受支持。请先备份，并使用 workLog CLI 升级。": "The database version is unsupported. Back it up and upgrade it with the workLog CLI.",
+    "项目目录或数据库已不可用。请检查目录并刷新列表。": "The project directory or database is unavailable. Check the directory and refresh.",
+    "项目数据库正忙。可以重试本次操作。": "The project database is busy. You can retry this operation.",
+    "无法写入 workLog 数据库。请检查文件权限和项目目录。": "Could not write to the workLog database. Verify the project directory and file permissions.",
+    "无法操作这项任务。请检查项目并刷新列表。": "Could not update the task. Check the project and refresh the list.",
+    "当前会话已变化。请重新打开项目侧栏。": "The current chat has changed. Reopen the Project Sidebar.",
+    "请在已建立的本地项目聊天中打开 workLog。": "Open workLog in an existing local project chat.",
+    "此侧栏已关联另一条聊天，请重新打开面板。": "This sidebar belongs to another chat. Reopen the panel.",
+    "此项目当前不可用。请先刷新 Dashboard。": "This project is unavailable. Refresh the Dashboard.",
+    "请先刷新任务列表。": "Refresh the task list.",
+    "当前聊天对应的项目已变化。请先刷新侧栏。": "This chat's project has changed. Refresh the sidebar.",
+    "任务已完成或取消。请刷新任务列表。": "The task is complete or cancelled. Refresh the task list.",
+    "当前聊天未找到 workLog 项目。请从项目目录建立本地聊天。": "This chat has no workLog project. Start a local chat in the project directory.",
+    "项目目录已变化。请核对实际目录和 workLog 登记后刷新。": "The project directory has changed. Verify it against the workLog registration and refresh.",
+    "workLog 数据库不可用。请核对项目目录中的数据库后刷新。": "The workLog database is unavailable. Verify it in the project directory and refresh.",
+    "workLog 项目登记格式有误。请检查登记文件后刷新。": "The workLog registry format is invalid. Check the registry and refresh.",
+    "无法访问 workLog 项目登记。请检查文件读取权限后刷新。": "Could not access the workLog registry. Check file permissions and refresh.",
+    "多个登记目录读取到相同项目 ID。请核对项目登记后刷新。": "Multiple registered directories have the same project ID. Verify the registry and refresh.",
+    "项目登记已变化。请刷新 Dashboard 后再试。": "The registry has changed. Refresh the Dashboard and try again.",
+    "请先在 Dashboard 选择项目。": "Select a project in the Dashboard.",
+    "当前项目数据已更换，请刷新任务列表后再试。": "This project's data has changed. Refresh the task list and try again.",
+    "这项任务已变化或不可用，请刷新任务列表后再试。": "This task has changed or is unavailable. Refresh the task list and try again.",
+    "这项任务已归档，请刷新任务列表。": "This task is archived. Refresh the task list.",
+    "这条交接已变化或不可用，请刷新任务列表后再试。": "This handoff has changed or is unavailable. Refresh the task list and try again.",
+    "这条历史记录不可用，请刷新任务列表后再试。": "This history entry is unavailable. Refresh the task list and try again.",
+    "数据库身份与 workLog 项目登记不一致。请核对项目登记。": "The database identity differs from the workLog registry. Verify the project registration.",
+    "找不到登记的项目目录。请恢复目录或修正项目登记后刷新。": "The registered project directory is missing. Restore it or correct the registration and refresh.",
+    "无法读取 workLog 项目登记。请检查登记文件的格式和读取权限后刷新。": "Could not read the workLog registry. Check its format and permissions, then refresh.",
+    "workLog 数据库读取失败。请检查数据库是否可读、格式是否完整，再刷新。": "Could not read the workLog database. Check its format and permissions, then refresh.",
+    "无法访问当前项目的 workLog 文件。请检查文件和读取权限，再刷新。": "Could not access this project's workLog files. Verify the files and permissions, then refresh.",
+    "workLog 项目数据或登记格式无法读取。请检查项目后再刷新。": "The workLog data or registry format could not be read. Check the project and refresh.",
+    "GitHub Releases 返回了无法读取的数据。": "GitHub Releases returned unreadable data.",
+    "GitHub Releases 上暂无该组件的正式版本。": "GitHub Releases has no stable release for this component yet.",
+    "请求无效。": "Invalid request.",
+    "工具名称或参数无效。": "Invalid tool or arguments.",
+    "项目侧栏只可操作当前会话关联的项目。": "The Project Sidebar can only change the project attached to this chat.",
+    "无效 JSON。": "Invalid JSON.",
+  });
+  const fallbackLocale = document.documentElement.getAttribute("lang");
+  const localeSource = {};
+  let panelLanguage = "en";
+  let supportsContinue = true;
+  let updateComponents = ["codex", "cli"];
+  const t = (key) => panelLanguage === "en" && Object.hasOwn(english, key) ? english[key] : key;
+
+  function panelMessage(result) {
+    if (!result?.message) return "";
+    if (panelLanguage === "en" && result.code === "unsupported_schema" && Array.isArray(result.supportedSchemas)) {
+      return 'Project database schema ' + result.schemaVersion + ' is unsupported. Supported schemas: '
+        + result.supportedSchemas.join(", ") + '.';
+    }
+    return t(result.message);
+  }
+
+  function updateError(error) {
+    if (!error || panelLanguage !== "en") return error;
+    const status = /^GitHub Releases 请求失败（HTTP (\d+)）。$/.exec(error);
+    if (status) return "GitHub Releases request failed (HTTP " + status[1] + ").";
+    if (/^无法连接 GitHub Releases/.test(error)) return "Could not connect to GitHub Releases.";
+    if (/^读取 GitHub Releases 失败/.test(error)) return "Could not read GitHub Releases.";
+    return t(error);
+  }
+
+  function chooseLanguage(hostLocale, systemLocale) {
+    const preferred = [hostLocale, fallbackLocale, systemLocale, navigator.languages?.[0], navigator.language]
+      .find(value => typeof value === "string" && value.trim());
+    const tag = (preferred || "").trim().toLowerCase();
+    if (tag === "zh" || /^zh-hans(?:-|$)/.test(tag) || /^zh-(cn|sg)$/.test(tag)) return "zh-Hans";
+    return "en";
+  }
+
+  function staticTranslations(root) {
+    const entries = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const key = node.textContent.trim();
+      if (key && Object.hasOwn(english, key)) {
+        const index = node.textContent.indexOf(key);
+        entries.push({node, key, before: node.textContent.slice(0, index), after: node.textContent.slice(index + key.length)});
+      }
+    }
+    for (const node of root.querySelectorAll("[aria-label], [title]")) {
+      for (const attr of ["aria-label", "title"]) {
+        const key = node.getAttribute(attr);
+        if (key && Object.hasOwn(english, key)) entries.push({node, key, attr});
+      }
+    }
+    for (const template of root.querySelectorAll("template")) entries.push(...staticTranslations(template.content));
+    return entries;
+  }
+
+  const translatedNodes = staticTranslations(document.body);
+
+  function localize(context) {
+    Object.assign(localeSource, context || {});
+    const language = chooseLanguage(localeSource.locale, localeSource.systemLocale);
+    const changed = document.documentElement.lang !== language;
+    panelLanguage = language;
+    document.documentElement.lang = language;
+    if (changed) {
+      for (const {node, key, before, after, attr} of translatedNodes) {
+        if (attr) node.setAttribute(attr, t(key));
+        else node.textContent = before + t(key) + after;
+      }
+    }
+    supportsContinue = localeSource.supportsContinue !== false;
+    if (Array.isArray(localeSource.updateComponents)) {
+      updateComponents = ["codex", "cli"].filter(component => localeSource.updateComponents.includes(component));
+    }
+    return changed;
+  }
+
+  localize();
+
   const byId = (id) => document.getElementById(id);
   const dashboard = document.documentElement.dataset.surface === "dashboard";
   const openTool = dashboard ? "open_worklog_dashboard" : "open_worklog_codex_panel";
@@ -620,6 +998,7 @@
   const historyTemplate = byId("history-template");
   const refreshStatus = byId("refresh-status");
   const filters = byId("filters");
+  const priorityFilters = byId("priority-filters");
   const tasks = byId("tasks");
   const tasksEmpty = byId("tasks-empty");
   const taskListViewport = byId("task-list-viewport");
@@ -646,6 +1025,7 @@
   let allProjects = [];
   let selectedProject = "";
   let selectedStatus = dashboard ? "active" : "all";
+  let selectedPriority = "all";
   let currentPage = 1;
   let expandedTask = null;
   let refreshInProgress = false;
@@ -654,8 +1034,10 @@
   const projectTarget = (project) => dashboard ? { projectId: project.id } : {};
   const taskTarget = (project, task) => ({ ...projectTarget(project), taskId: task.id });
   const taskKey = (project, task) => project.id + "/" + task.id;
-  const visible = (task) => selectedStatus === "all" || task.status === selectedStatus
+  const matchesStatus = (task) => selectedStatus === "all" || task.status === selectedStatus
     || (selectedStatus === "active" && !terminal.has(task.status));
+  const matchesPriority = (task) => selectedPriority === "all" || taskPriority(task) === selectedPriority;
+  const visible = (task) => matchesStatus(task) && matchesPriority(task);
   const projectViewKey = (project) => project.state === "ready" ? project.id : "path:" + project.path;
   const scopedProjects = () => allProjects.filter((project) => !selectedProject || projectViewKey(project) === selectedProject);
 
@@ -668,7 +1050,7 @@
   }
 
   if (dashboard) {
-    projectName.textContent = "项目总览";
+    projectName.textContent = t("项目总览");
     projectName.hidden = false;
   }
 
@@ -692,9 +1074,7 @@
     ahead: "高于最新正式版",
     unknown: "无法判断",
   };
-  const timeFormat = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  });
+  const compactTime = new Intl.DateTimeFormat("en", {hour: "2-digit", minute: "2-digit", hourCycle: "h23"});
 
   const host = window.parent;
   const initializeId = 1;
@@ -702,7 +1082,7 @@
   const pendingTools = new Map();
   const post = (message) => host.postMessage({ jsonrpc: "2.0", ...message }, "*");
   const timeout = window.setTimeout(() => {
-    showUnavailable({message: "尚未收到 workLog 数据。请尝试重新打开面板。"});
+    showUnavailable({message: t("尚未收到 workLog 数据。请尝试重新打开面板。")});
   }, 8000);
 
   function icon(name) {
@@ -717,15 +1097,12 @@
   }
 
   function formatTime(value) {
-    let dateText = value || "";
-    if (dateText && Number.isFinite(Date.parse(dateText))) {
-      const parts = Object.fromEntries(
-        timeFormat.formatToParts(new Date(dateText)).map(({ type, value }) => [type, value])
-      );
-      const year = Number(parts.year) === new Date().getFullYear() ? "" : parts.year + " 年 ";
-      dateText = year + parts.month + " 月 " + parts.day + " 日 " + parts.hour + ":" + parts.minute;
-    }
-    return dateText;
+    if (!value || !Number.isFinite(Date.parse(value))) return value || "";
+    const date = new Date(value);
+    const year = date.getFullYear() === new Date().getFullYear() ? undefined : "numeric";
+    return new Intl.DateTimeFormat(panelLanguage, {
+      year, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).format(date);
   }
 
   function metadata(record) {
@@ -753,27 +1130,27 @@
     const introIcon = element("div", "", "guide-icon");
     introIcon.setAttribute("aria-hidden", "true");
     introIcon.append(icon("folder"));
-    const heading = element("h1", dashboard ? "添加第一个项目" : "当前聊天未找到 workLog 项目");
+    const heading = element("h1", dashboard ? t("添加第一个项目") : t("当前聊天未找到 workLog 项目"));
     const instruction = element("p", dashboard
-      ? "在项目根目录打开 Codex 本地聊天，选中 "
-      : "在项目管理目录的 Codex 本地聊天中，选中 ",
+      ? t("在项目根目录打开 Codex 本地聊天，选中 ")
+      : t("在项目管理目录的 Codex 本地聊天中，选中 "),
       "guide-instruction");
-    instruction.append(element("strong", "worklog Skill"), " 后发送提示词。");
-    const prompt = element("p", "请为本项目初始化worklog。", "guide-prompt");
-    const copy = button("复制启用提示词", "guide-copy");
+    instruction.append(element("strong", "worklog Skill"), t(" 后发送提示词。"));
+    const prompt = element("p", t("请为本项目初始化worklog。"), "guide-prompt");
+    const copy = button(t("复制启用提示词"), "guide-copy");
     copy.prepend(icon("copy"));
     const feedback = element("p", "", "meta guide-feedback");
     feedback.setAttribute("role", "status");
     const next = dashboard
-      ? "启用后回到这里点「刷新」。"
-      : "启用后在该聊天打开项目侧栏，或点「重试读取任务」。";
+      ? t("启用后回到这里点「刷新」。")
+      : t("启用后在该聊天打开项目侧栏，或点「重试读取任务」。");
     copy.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(prompt.textContent);
-        feedback.textContent = "已复制。" + next;
+        feedback.textContent = t("已复制。") + next;
       } catch {
         window.getSelection().selectAllChildren(prompt);
-        feedback.textContent = "已选中提示词，请手动复制。" + next;
+        feedback.textContent = t("已选中提示词，请手动复制。") + next;
       }
     });
     emptyWorklog.append(introIcon, heading, instruction, prompt, copy, feedback);
@@ -796,8 +1173,11 @@
 
   async function callTool(name, args, wait) {
     const response = await callHost("tools/call", { name, arguments: args }, wait);
-    if (response?.result?.structuredContent) return response.result.structuredContent;
-    return { state: "unavailable", retryable: true, message: response ? "Codex 未能返回此项结果，请重试。" : "请求超时，请重试。" };
+    if (response?.result?.structuredContent) {
+      const data = response.result.structuredContent;
+      return data.message || data.error ? {...data, message: panelMessage(data), error: updateError(data.error)} : data;
+    }
+    return { state: "unavailable", retryable: true, message: response ? t("Codex 未能返回此项结果，请重试。") : t("请求超时，请重试。") };
   }
 
   function originalLoader(original, request, emptyMessage) {
@@ -811,12 +1191,12 @@
       if (loaded || loading) return;
       loading = true;
       status.hidden = false;
-      status.textContent = "正在读取原文…";
+      status.textContent = t("正在读取原文…");
       retry.hidden = true;
       const result = await request();
       loading = false;
       if (result?.state !== "ready" || typeof result.body !== "string") {
-        status.textContent = result?.message || "无法读取原文。";
+        status.textContent = result?.message || t("无法读取原文。");
         retry.hidden = false;
         return;
       }
@@ -835,9 +1215,9 @@
     const entry = document.createElement("li");
     const content = document.createElement("span");
     const state = document.createElement("span");
-    const [label, mark] = todoStates[item.status] || ["状态未知", "todo"];
+    const [label, mark] = todoStates[item.status] || [t("状态未知"), "todo"];
     state.className = "meta todo-status";
-    state.textContent = label;
+    state.textContent = t(label);
     content.append(state, item.summary);
     if (item.outcome) {
       const outcome = document.createElement("span");
@@ -854,20 +1234,21 @@
     const details = entry.querySelector("details");
     const [label, mark] = historyKinds[record.kind] || [record.kind, "file"];
     entry.querySelector(".history-icon").append(icon(mark));
-    entry.querySelector(".history-caption").textContent = record.summary;
-    entry.querySelector(".history-kind").textContent = label;
+    entry.querySelector(".history-caption").textContent = record.source === "change"
+      ? record.summary.split(" → ").map(t).join(" → ") : record.summary;
+    entry.querySelector(".history-kind").textContent = t(label);
     const time = entry.querySelector("time");
     time.dateTime = record.at;
     time.textContent = formatTime(record.at);
-    let source = record.client || (record.source === "change" ? "workLog CLI" : "任务记录");
-    if (record.projectRecord) source = record.client ? record.client + " · 项目关联记录" : "项目关联记录";
+    let source = record.client || (record.source === "change" ? "workLog CLI" : t("任务记录"));
+    if (record.projectRecord) source = record.client ? record.client + t(" · 项目关联记录") : t("项目关联记录");
     const sourceNode = entry.querySelector(".history-source");
     sourceNode.textContent = source;
     if (record.sessionId) sourceNode.append(element("code", " · " + record.sessionId, "source-session"));
     entry.querySelector(".history-superseded").hidden = !record.superseded;
     const load = originalLoader(entry.querySelector(".original"), () => callTool("read_worklog_history", {
       ...taskTarget(project, task), source: record.source, recordId: record.id,
-    }), "这条历史记录没有原文。");
+    }), t("这条历史记录没有原文。"));
     details.addEventListener("toggle", () => { if (details.open) void load(); });
     return entry;
   }
@@ -888,19 +1269,19 @@
       if (loaded || loading) return;
       loading = true;
       state.hidden = false;
-      state.textContent = "正在读取待办和历史…";
+      state.textContent = t("正在读取待办和历史…");
       retry.hidden = true;
       const result = await callTool("read_worklog_task_sections", taskTarget(project, task));
       loading = false;
       if (result?.state !== "ready" || !result.todos || !Array.isArray(result.history)) {
-        state.textContent = result?.message || "无法读取待办和历史。";
+        state.textContent = result?.message || t("无法读取待办和历史。");
         retry.hidden = false;
         return;
       }
       const { open, processed } = result.todos;
-      row.querySelector(".todo-count").textContent = "未完成 " + open.length + " 项";
-      row.querySelector(".history-count").textContent = result.history.length + " 条";
-      row.querySelector(".processed-count").textContent = "已处理 · " + processed.length + " 项";
+      row.querySelector(".todo-count").textContent = t("未完成 ") + open.length + t(" 项");
+      row.querySelector(".history-count").textContent = result.history.length + t(" 条");
+      row.querySelector(".processed-count").textContent = t("已处理 · ") + processed.length + t(" 项");
       row.querySelector(".todos-empty").hidden = open.length > 0;
       row.querySelector(".history-empty").hidden = result.history.length > 0;
       row.querySelector(".processed-section").hidden = processed.length === 0;
@@ -909,7 +1290,7 @@
       renderItems(row.querySelector(".history-entries"), result.history, (record) => renderHistory(project, task, record));
       const sessions = result.sessions || [];
       row.querySelector(".sessions-section").hidden = sessions.length === 0;
-      row.querySelector(".sessions-count").textContent = sessions.length + " 条";
+      row.querySelector(".sessions-count").textContent = sessions.length + t(" 条");
       renderItems(row.querySelector(".session-items"), sessions, (session) => {
         const item = element("li", session.client + " · ");
         item.append(element("code", session.sessionId, "source-session"));
@@ -924,34 +1305,58 @@
   }
 
 
+  const priorityLabels = new Map([
+    ["p0", "P0 最高"], ["p1", "P1 高"], ["p2", "P2 常规"], ["p3", "P3 低"], [null, "未设置"],
+  ]);
+  const taskPriority = task => priorityLabels.has(task.priority) ? task.priority : null;
+
+  function priorityMark(priority) {
+    const mark = element("span", "", "priority-mark");
+    mark.dataset.priority = priority ?? "unset";
+    mark.setAttribute("aria-hidden", "true");
+    mark.append(priority === null ? icon("unset-priority") : priority.toUpperCase());
+    return mark;
+  }
+
   function renderTask(project, task, index) {
     const row = taskTemplate.content.firstElementChild.cloneNode(true);
     const find = (selector) => row.querySelector(selector);
     const toggle = find(".task-toggle");
     const status = find(".task-status");
-    const [label, statusIcon] = statuses.get(task.status) || ["未知状态", "todo"];
+    const [statusLabel, statusIcon] = statuses.get(task.status) || ["未知状态", "todo"];
+    const label = t(statusLabel);
     const key = taskKey(project, task);
     row.dataset.status = task.status;
     row.dataset.key = key;
     find(".task-title").textContent = task.title;
     find(".task-number").textContent = task.number;
+    const priority = taskPriority(task);
+    const priorityName = t(priorityLabels.get(priority));
+    const priorityButton = find(".task-priority");
+    priorityButton.append(priorityMark(priority));
+    priorityButton.disabled = !project.writable;
+    priorityButton.setAttribute("aria-label", task.number + t(" 优先级：") + priorityName);
+    priorityButton.title = priorityName;
+    find(".priority-value").textContent = priorityName;
+    if (project.writable) priorityButton.addEventListener("click", () => openPriorityMenu(project, task, priorityButton));
     status.append(icon(statusIcon));
     status.disabled = !project.writable;
-    status.setAttribute("aria-label", task.number + " " + label + (project.writable ? "，切换状态" : ""));
+    status.setAttribute("aria-label", task.number + " " + label + (project.writable ? t("，切换状态") : ""));
     status.title = label;
     if (project.writable) {
       status.append(element("span", "", "caret"));
       status.addEventListener("click", () => openStatusMenu(project, task, status));
     }
     if (task.updatedAt && Number.isFinite(Date.parse(task.updatedAt))) {
-      const parts = Object.fromEntries(timeFormat.formatToParts(new Date(task.updatedAt))
-        .map(({type, value}) => [type, value]));
+      const date = new Date(task.updatedAt);
       const time = find(".task-updated");
       time.hidden = false;
       time.dateTime = task.updatedAt;
       time.title = formatTime(task.updatedAt);
-      find(".task-day").textContent = parts.month + "/" + parts.day;
-      find(".task-clock").textContent = " " + parts.hour + ":" + parts.minute;
+      find(".task-day").textContent = new Intl.DateTimeFormat(panelLanguage, {
+        month: "numeric", day: "numeric",
+      }).format(date);
+      find(".task-clock").textContent = " " + compactTime.format(date);
     }
 
     const detail = find(".task-detail");
@@ -979,32 +1384,32 @@
     });
 
     const progressValue = find(".progress-value");
-    progressValue.textContent = task.progress?.summary || "暂无进展";
+    progressValue.textContent = task.progress?.summary || t("暂无进展");
     progressValue.toggleAttribute("data-empty", !task.progress);
     const progressMeta = find(".progress-meta");
     progressMeta.textContent = metadata(task.progress);
     progressMeta.hidden = !progressMeta.textContent;
-    if (task.progress?.sessionId) progressMeta.title = "来源会话 " + task.progress.sessionId;
+    if (task.progress?.sessionId) progressMeta.title = t("来源会话 ") + task.progress.sessionId;
     const next = terminal.has(task.status) ? null : task.nextStep;
     find(".next").toggleAttribute("data-empty", !next);
-    find(".next-value").textContent = next || "暂无下一步";
+    find(".next-value").textContent = next || t("暂无下一步");
     const continueTask = find(".continue-task");
-    continueTask.hidden = terminal.has(task.status);
-    continueTask.setAttribute("aria-label", "继续任务 " + task.number);
-    continueTask.title = "继续任务 " + task.number;
+    continueTask.hidden = !supportsContinue || terminal.has(task.status);
+    continueTask.setAttribute("aria-label", t("继续任务 ") + task.number);
+    continueTask.title = t("继续任务 ") + task.number;
     const continueFeedback = find(".continue-feedback");
     continueTask.addEventListener("click", async () => {
       continueTask.disabled = true;
       continueFeedback.hidden = true;
-      const result = await callTool("prepare_worklog_continue", taskTarget(project, task));
+      const result = await callTool("prepare_worklog_continue", {...taskTarget(project, task), locale: panelLanguage});
       if (result?.state === "ready" && typeof result.url === "string" && result.url.startsWith("codex://threads/new?")) {
         const response = await callHost("ui/open-link", {url: result.url});
         if (!openedLink(response)) {
-          continueFeedback.textContent = "Codex 未能打开新聊天。请重新读取任务后重试。";
+          continueFeedback.textContent = t("Codex 未能打开新聊天。请重新读取任务后重试。");
           continueFeedback.hidden = false;
         }
       } else {
-        continueFeedback.textContent = result?.message || "无法准备新聊天，请重试。";
+        continueFeedback.textContent = result?.message || t("无法准备新聊天，请重试。");
         continueFeedback.hidden = false;
       }
       continueTask.disabled = false;
@@ -1015,8 +1420,8 @@
     const handoffMetadata = metadata(handoffEntry);
     find(".handoff-meta").textContent = handoffMetadata;
     find(".handoff-meta").hidden = !handoffMetadata;
-    if (handoffEntry?.sessionId) find(".handoff-meta").title = "来源会话 " + handoffEntry.sessionId;
-    find(".handoff-summary").textContent = handoffEntry ? handoffEntry.summary || "暂无交接摘要" : "暂无交接记录";
+    if (handoffEntry?.sessionId) find(".handoff-meta").title = t("来源会话 ") + handoffEntry.sessionId;
+    find(".handoff-summary").textContent = handoffEntry ? handoffEntry.summary || t("暂无交接摘要") : t("暂无交接记录");
     originalToggle.hidden = !handoffEntry;
     if (handoffEntry) {
       const original = find(".handoff .original");
@@ -1024,11 +1429,11 @@
       originalToggle.setAttribute("aria-controls", original.id);
       const loadOriginal = originalLoader(original, () =>
         callTool("read_worklog_codex_handoff", { ...taskTarget(project, task), entryId: handoffEntry.id }),
-        "这条交接没有记录原文。");
+        t("这条交接没有记录原文。"));
       originalToggle.addEventListener("click", () => {
         original.hidden = !original.hidden;
         originalToggle.setAttribute("aria-expanded", String(!original.hidden));
-        const action = original.hidden ? "查看交接原文" : "收起交接原文";
+        const action = original.hidden ? t("查看交接原文") : t("收起交接原文");
         originalToggle.setAttribute("aria-label", action);
         originalToggle.title = action;
         if (!original.hidden) void loadOriginal();
@@ -1042,10 +1447,19 @@
     closeStatusMenu();
     const scopes = scopedProjects();
     const available = scopes.flatMap((project) => project.tasks || []);
-    const counts = new Map([["all", available.length], ["active", 0]]);
+    const statusCounts = new Map([["all", 0], ["active", 0]]);
+    const priorityCounts = new Map([["all", 0]]);
     for (const task of available) {
-      counts.set(task.status, (counts.get(task.status) || 0) + 1);
-      if (!terminal.has(task.status)) counts.set("active", counts.get("active") + 1);
+      if (matchesPriority(task)) {
+        statusCounts.set("all", statusCounts.get("all") + 1);
+        statusCounts.set(task.status, (statusCounts.get(task.status) || 0) + 1);
+        if (!terminal.has(task.status)) statusCounts.set("active", statusCounts.get("active") + 1);
+      }
+      if (matchesStatus(task)) {
+        priorityCounts.set("all", priorityCounts.get("all") + 1);
+        const priority = taskPriority(task);
+        priorityCounts.set(priority, (priorityCounts.get(priority) || 0) + 1);
+      }
     }
     if (!scopes.some((project) => project.tasks?.some((task) => visible(task) && taskKey(project, task) === expandedTask))) {
       expandedTask = null;
@@ -1057,7 +1471,7 @@
       filter.dataset.status = key;
       filter.setAttribute("aria-pressed", String(key === selectedStatus));
       filter.setAttribute("aria-controls", "tasks");
-      filter.append(icon(statusIcon), label, element("span", String(counts.get(key) || 0), "count"));
+      filter.append(icon(statusIcon), t(label), element("span", String(statusCounts.get(key) || 0), "count"));
       filter.addEventListener("click", () => {
         if (selectedStatus !== key) {
           selectedStatus = key;
@@ -1066,6 +1480,24 @@
         focusFilter();
       });
       filters.append(filter);
+    }
+    priorityFilters.replaceChildren();
+    for (const [priority, label] of [["all", t("全部优先级")], ...priorityLabels]) {
+      const filter = button("", "filter");
+      filter.dataset.priority = priority ?? "unset";
+      filter.setAttribute("aria-pressed", String(selectedPriority === priority));
+      filter.setAttribute("aria-controls", "tasks");
+      const count = String(priorityCounts.get(priority) || 0);
+      filter.setAttribute("aria-label", t(label) + " " + count);
+      filter.append(priority === "all" ? t(label) : priorityMark(priority), element("span", count, "count"));
+      filter.addEventListener("click", () => {
+        if (selectedPriority !== priority) {
+          selectedPriority = priority;
+          renderFirstPage();
+        }
+        focusFilter(priorityFilters);
+      });
+      priorityFilters.append(filter);
     }
 
     const statusOrder = ["IN_PROGRESS", "BLOCKED", "TODO", "PAUSED", "DONE", "CANCELLED"];
@@ -1090,14 +1522,14 @@
     tasks.style.setProperty("--task-number-width", idLength * 7 + "px");
     let index = 0;
     function group(status, project, list, groupCount) {
-      const name = dashboard ? projectLabel(project) : statuses.get(status)[0];
+      const name = dashboard ? projectLabel(project) : t(statuses.get(status)[0]);
       const key = projectViewKey(project);
       const mark = dashboard ? "folder" : statuses.get(status)[1];
       const wrapper = element(dashboard ? "details" : "section", "", "group");
       const heading = element(dashboard ? "summary" : "h2", "", "group-heading");
       if (dashboard) heading.append(chevron());
       else wrapper.dataset.status = status;
-      heading.append(icon(mark), element("span", name), element("span", groupCount + (dashboard ? "" : " 项"), "count"));
+      heading.append(icon(mark), element("span", name), element("span", groupCount + (dashboard ? "" : t(" 项")), "count"));
       wrapper.append(heading);
       if (dashboard) {
         wrapper.open = !closedProjects.has(key);
@@ -1108,9 +1540,9 @@
         });
       }
       const rows = element("div", "", "task-rows");
-      if (project.state !== "ready") rows.append(element("p", project.message || "无法读取此项目。请检查登记后刷新。", "group-note empty"));
+      if (project.state !== "ready") rows.append(element("p", panelMessage(project) || t("无法读取此项目。请检查登记后刷新。"), "group-note empty"));
       else if (list.length === 0) rows.append(element("p",
-        project.tasks.length ? "该筛选范围内暂无任务。" : "此项目还没有任务。", "group-note empty"));
+        project.tasks.length ? t("该筛选范围内暂无任务。") : t("此项目还没有任务。"), "group-note empty"));
       else for (const task of list) rows.append(renderTask(project, task, index++));
       wrapper.append(rows);
       return wrapper;
@@ -1133,12 +1565,11 @@
     byId("page-number").textContent = currentPage;
     byId("page-count").textContent = pageCount;
     if (currentPage !== oldPage) taskListViewport.scrollTop = 0;
-    const visibleCount = counts.get(selectedStatus) || 0;
     const hasReadableProjects = scopes.some((project) => project.state === "ready");
-    const filterEmpty = hasReadableProjects && visibleCount === 0 && available.length > 0;
+    const filterEmpty = hasReadableProjects && total === 0 && available.length > 0;
     tasksEmpty.hidden = !filterEmpty && (dashboard || available.length > 0);
-    byId("empty-tasks-message").textContent = filterEmpty ? "当前筛选下暂无任务。" : "此项目还没有任务。";
-    byId("show-all").hidden = !filterEmpty || selectedStatus === "all";
+    byId("empty-tasks-message").textContent = filterEmpty ? t("当前筛选下暂无任务。") : t("此项目还没有任务。");
+    byId("show-all").hidden = !filterEmpty || (selectedStatus === "all" && selectedPriority === "all");
     addTask.disabled = !allProjects.some((project) => project.writable);
   }
 
@@ -1161,8 +1592,8 @@
     return mark;
   }
 
-  function focusFilter() {
-    filters.querySelector('[aria-pressed="true"]')?.focus();
+  function focusFilter(group = filters) {
+    group.querySelector('[aria-pressed="true"]')?.focus();
   }
 
   function showUnavailable(result) {
@@ -1175,7 +1606,7 @@
       return;
     }
     emptyWorklog.hidden = true;
-    panelStatus.textContent = result?.message || "无法读取 workLog 任务，请重试。";
+    panelStatus.textContent = panelMessage(result) || t("无法读取 workLog 任务，请重试。");
     panelStatus.hidden = false;
   }
 
@@ -1200,7 +1631,7 @@
       return false;
     }
     if (dashboard ? !Array.isArray(result.projects) : !Array.isArray(result.tasks)) {
-      showUnavailable({message: "Codex 返回的任务数据格式不正确。请尝试重新打开面板。"});
+      showUnavailable({message: t("Codex 返回的任务数据格式不正确。请尝试重新打开面板。")});
       return false;
     }
     allProjects = dashboard ? result.projects : [result];
@@ -1218,7 +1649,7 @@
         currentPage = 1;
         taskListViewport.scrollTop = 0;
       }
-      projectOptions(projectFilter, allProjects, "全部项目", selectedProject);
+      projectOptions(projectFilter, allProjects, t("全部项目"), selectedProject);
     } else {
       projectName.textContent = result.projectName;
       projectName.hidden = false;
@@ -1228,22 +1659,22 @@
     return true;
   }
 
-  async function refreshProject(feedback = "已刷新任务。", targetTask) {
+  async function refreshProject(feedback = t("已刷新任务。"), targetTask) {
     if (refreshInProgress) return false;
     const fromGuide = !emptyWorklog.hidden;
     refreshInProgress = true;
     refresh.disabled = true;
     retryProject.disabled = true;
     if (tasksView.hidden) panelStatus.hidden = true;
-    refreshStatus.textContent = "正在刷新任务…";
+    refreshStatus.textContent = t("正在刷新任务…");
     const result = await callTool(openTool, {});
     const ok = acceptView(result, targetTask);
     refreshInProgress = false;
     refresh.disabled = false;
     retryProject.disabled = false;
-    if (feedback === "已刷新任务。") {
+    if (feedback === t("已刷新任务。")) {
       if (!ok || allProjects.length === 0) feedback = "";
-      else if (fromGuide && allProjects.length === 1) feedback = "读取到「" + projectLabel(allProjects[0]) + "」。";
+      else if (fromGuide && allProjects.length === 1) feedback = t("读取到「") + projectLabel(allProjects[0]) + t("」。");
     }
     refreshStatus.textContent = feedback;
     return ok;
@@ -1263,6 +1694,7 @@
   });
   byId("show-all").addEventListener("click", () => {
     selectedStatus = "all";
+    selectedPriority = "all";
     renderFirstPage();
     focusFilter();
   });
@@ -1326,6 +1758,35 @@
     menuTrigger = undefined;
   }
 
+  function openPriorityMenu(project, task, trigger) {
+    if (isWriting || refreshInProgress) return;
+    const wasOpen = menuTrigger === trigger && menu.matches(":popover-open");
+    closeStatusMenu();
+    if (wasOpen) return;
+    menu.classList.add("priority-menu");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", t("选择任务优先级"));
+    menu.replaceChildren();
+    const current = taskPriority(task);
+    for (const [priority, label] of priorityLabels) {
+      const option = button("", "");
+      option.dataset.priority = priority ?? "unset";
+      option.setAttribute("role", "menuitemradio");
+      option.setAttribute("aria-label", t(label));
+      option.setAttribute("aria-checked", String(current === priority));
+      option.tabIndex = -1;
+      option.append(priorityMark(priority));
+      if (current === priority) option.append(icon("check"));
+      option.addEventListener("click", () => {
+        closeStatusMenu();
+        trigger.focus();
+        if (current !== priority) void mutate(project, task, "task-set-priority", {priority});
+      });
+      menu.append(option);
+    }
+    showTaskMenu(trigger, menu.querySelector('[aria-checked="true"]'));
+  }
+
   function openStatusMenu(project, task, trigger) {
     if (isWriting || refreshInProgress) return;
     const wasOpen = menuTrigger === trigger && menu.matches(":popover-open");
@@ -1336,9 +1797,12 @@
       choices.splice(choices.indexOf("complete"), 0, "resolveBlocker");
     }
     if (!choices.length) return;
+    menu.classList.remove("priority-menu");
+    menu.removeAttribute("role");
+    menu.removeAttribute("aria-label");
     menu.replaceChildren();
     for (const action of choices) {
-      const item = button(actions[action][0], "");
+      const item = button(t(actions[action][0]), "");
       item.dataset.action = action;
       item.addEventListener("click", () => {
         closeStatusMenu();
@@ -1350,6 +1814,10 @@
       });
       menu.append(item);
     }
+    showTaskMenu(trigger, menu.querySelector("button"));
+  }
+
+  function showTaskMenu(trigger, initial) {
     menuTrigger = trigger;
     trigger.setAttribute("aria-expanded", "true");
     const anchor = trigger.getBoundingClientRect();
@@ -1360,7 +1828,7 @@
       ? Math.max(margin, anchor.top - menu.offsetHeight - 3) : anchor.bottom + 3;
     menu.style.left = Math.max(margin, x) + "px";
     menu.style.top = y + "px";
-    menu.querySelector("button")?.focus();
+    initial?.focus();
   }
 
   function resetDialog(title, submission, target = "") {
@@ -1386,22 +1854,22 @@
     if (isWriting || refreshInProgress) return;
     const writable = allProjects.filter((project) => project.writable);
     if (!writable.length) return;
-    resetDialog("添加任务", "添加");
+    resetDialog(t("添加任务"), t("添加"));
     const select = element("select");
     if (dashboard) {
       const preselected = writable.some((project) => projectViewKey(project) === selectedProject) ? selectedProject : "";
-      projectOptions(select, writable, "请选择项目", preselected);
-      dialogFields.append(labeled("所属项目", select));
+      projectOptions(select, writable, t("请选择项目"), preselected);
+      dialogFields.append(labeled(t("所属项目"), select));
     }
     const title = element("input");
     title.type = "text";
-    dialogFields.append(labeled("任务标题", title));
+    dialogFields.append(labeled(t("任务标题"), title));
     (dashboard && !select.value ? select : title).focus();
     confirmAction = () => {
       const project = dashboard ? writable.find((item) => projectViewKey(item) === select.value) : writable[0];
-      if (!project) return invalid("请选择所属项目。", select);
+      if (!project) return invalid(t("请选择所属项目。"), select);
       const value = title.value.trim();
-      if (!value) return invalid("请填写任务标题。", title);
+      if (!value) return invalid(t("请填写任务标题。"), title);
       return mutate(project, null, "task-create", {title: value});
     };
   }
@@ -1412,14 +1880,14 @@
 
   function openReason(project, task, action) {
     const [label, command] = actions[action];
-    resetDialog(label, action === "cancel" ? "确认取消任务" : "确认重新打开", taskLabel(project, task));
+    resetDialog(t(label), action === "cancel" ? t("确认取消任务") : t("确认重新打开"), taskLabel(project, task));
     const input = element("textarea");
     input.rows = 3;
-    dialogFields.append(labeled("原因", input));
+    dialogFields.append(labeled(t("原因"), input));
     input.focus();
     confirmAction = () => {
       const reason = input.value.trim();
-      if (!reason) return invalid("请填写原因。", input);
+      if (!reason) return invalid(t("请填写原因。"), input);
       return mutate(project, task, command, {reason});
     };
   }
@@ -1427,9 +1895,9 @@
   async function openBlocker(project, task, action) {
     const [label, command] = actions[action];
     const resolving = action === "resolveBlocker";
-    resetDialog(label, resolving ? "确认解除" : "确认设置", taskLabel(project, task));
+    resetDialog(t(label), resolving ? t("确认解除") : t("确认设置"), taskLabel(project, task));
     submitButton.disabled = true;
-    const loading = element("p", "正在核对任务和接手状态…", "meta");
+    const loading = element("p", t("正在核对任务和接手状态…"), "meta");
     dialogFields.append(loading);
     closeButton.focus();
     const result = await callTool("read_worklog_blocker_options", {
@@ -1439,7 +1907,7 @@
     loading.remove();
     if (result.state !== "ready") {
       dialogError.textContent = result.message;
-      const reload = button("刷新任务");
+      const reload = button(t("刷新任务"));
       reload.addEventListener("click", async () => {
         dialog.close();
         await refreshProject();
@@ -1455,7 +1923,7 @@
     explanation.rows = 3;
     if (resolving) {
       if (!result.blockers.length) {
-        dialogError.textContent = "任务已没有生效阻塞。请刷新列表。";
+        dialogError.textContent = t("任务已没有生效阻塞。请刷新列表。");
         return;
       }
       for (const blocker of result.blockers) {
@@ -1466,33 +1934,33 @@
       const condition = element("p", "", "meta");
       const showCondition = () => {
         const selected = result.blockers.find((item) => item.id === primary.value);
-        affected.textContent = selected && selected.blockedWork !== selected.summary ? "受阻事项：" + selected.blockedWork : "";
+        affected.textContent = selected && selected.blockedWork !== selected.summary ? t("受阻事项：") + selected.blockedWork : "";
         affected.hidden = !affected.textContent;
-        condition.textContent = selected ? "解除条件：" + selected.unblockCondition : "";
+        condition.textContent = selected ? t("解除条件：") + selected.unblockCondition : "";
       };
       primary.addEventListener("change", showCondition);
       showCondition();
-      dialogFields.append(labeled("要解除的阻塞", primary), affected, condition, labeled("解除说明", explanation));
+      dialogFields.append(labeled(t("要解除的阻塞"), primary), affected, condition, labeled(t("解除说明"), explanation));
     } else {
       primary.rows = 3;
-      dialogFields.append(labeled("受阻事项及原因", primary), labeled("解除条件", explanation));
+      dialogFields.append(labeled(t("受阻事项及原因"), primary), labeled(t("解除条件"), explanation));
     }
     submitButton.disabled = false;
     primary.focus();
     confirmAction = () => {
       const work = primary.value.trim();
       const reason = explanation.value.trim();
-      if (!work) return invalid(resolving ? "请选择要解除的阻塞。" : "请填写受阻事项及原因。", primary);
-      if (!reason) return invalid(resolving ? "请填写解除说明。" : "请填写解除条件。", explanation);
+      if (!work) return invalid(resolving ? t("请选择要解除的阻塞。") : t("请填写受阻事项及原因。"), primary);
+      if (!reason) return invalid(resolving ? t("请填写解除说明。") : t("请填写解除条件。"), explanation);
       const fields = resolving ? {blocker_id: work, outcome_md: reason} : {blocked_work: work, unblock_condition: reason};
       return mutate(project, task, command, {...guards, ...fields});
     };
   }
 
   async function openCompletion(project, task) {
-    resetDialog("完成任务", "确认完成", taskLabel(project, task));
+    resetDialog(t("完成任务"), t("确认完成"), taskLabel(project, task));
     submitButton.disabled = true;
-    const loading = element("p", "正在读取完成依据和待办…", "meta");
+    const loading = element("p", t("正在读取完成依据和待办…"), "meta");
     dialogFields.append(loading);
     closeButton.focus();
     const result = await callTool("read_worklog_completion_options", {
@@ -1501,7 +1969,7 @@
     if (!dialog.open || !loading.isConnected) return;
     if (result.state !== "ready") {
       if (result.retryable) {
-        const retry = button("重试读取完成依据");
+        const retry = button(t("重试读取完成依据"));
         retry.addEventListener("click", () => {
           dialog.close();
           void openCompletion(project, task);
@@ -1521,16 +1989,16 @@
     scope.rows = 2;
     scope.value = result.completedScope;
     const evidence = element("select");
-    if (!result.evidence.length) evidence.add(new Option("暂无符合规则的已保存进展或交接", ""));
+    if (!result.evidence.length) evidence.add(new Option(t("暂无符合规则的已保存进展或交接"), ""));
     for (const [index, record] of result.evidence.entries()) {
-      const caption = [record.label, record.summary, metadata(record)].filter(Boolean).join(" · ");
+      const caption = [t(record.label), record.summary, metadata(record)].filter(Boolean).join(" · ");
       evidence.add(new Option(caption, String(index)));
     }
-    dialogFields.append(labeled("完成范围", scope), labeled("完成依据", evidence));
+    dialogFields.append(labeled(t("完成范围"), scope), labeled(t("完成依据"), evidence));
     const inputs = new Map();
     if (result.todos.length) {
       const todos = element("fieldset", "", "modal-todos");
-      todos.append(element("legend", "开放待办及处置"));
+      todos.append(element("legend", t("开放待办及处置")));
       for (const todo of result.todos) {
         const input = element("textarea");
         input.rows = 2;
@@ -1538,7 +2006,7 @@
         inputs.set(todo.id, input);
       }
       if (inputs.size > 1) {
-        const fill = button("将首条说明填入其他空项");
+        const fill = button(t("将首条说明填入其他空项"));
         fill.addEventListener("click", () => {
           const [first, ...rest] = inputs.values();
           const description = first.value.trim();
@@ -1551,22 +2019,22 @@
       dialogFields.append(todos);
     }
     if (result.blockers.length) {
-      dialogError.textContent = "未解除的任务级阻塞：" + result.blockers.map((item) => item.summary).join("、");
+      dialogError.textContent = t("未解除的任务级阻塞：") + result.blockers.map((item) => item.summary).join(t("、"));
     } else if (!result.evidence.length) {
-      dialogError.textContent = "请先保存至少一条符合完成规则的进展或交接。";
+      dialogError.textContent = t("请先保存至少一条符合完成规则的进展或交接。");
     } else {
       submitButton.disabled = false;
     }
     scope.focus();
     confirmAction = () => {
       const completedScope = scope.value.trim();
-      if (!completedScope) return invalid("请填写完成范围。", scope);
+      if (!completedScope) return invalid(t("请填写完成范围。"), scope);
       const record = evidence.value !== "" && result.evidence[Number(evidence.value)];
-      if (!record) return invalid("请选择有效的完成依据。", evidence);
+      if (!record) return invalid(t("请选择有效的完成依据。"), evidence);
       const dispositions = {};
       for (const [id, input] of inputs) {
         const text = input.value.trim();
-        if (!text) return invalid("请填写每条开放待办的处置说明。", input);
+        if (!text) return invalid(t("请填写每条开放待办的处置说明。"), input);
         dispositions[id] = text;
       }
       return mutate(project, task, "task-complete", {
@@ -1602,12 +2070,12 @@
     return sendWrite({project, task, command, request});
   }
 
-  function focusAfterWrite(project, id) {
+  function focusAfterWrite(project, id, command) {
     const row = tasks.querySelector('.task[data-key="' + CSS.escape(project.id + "/" + id) + '"]');
-    const status = row?.querySelector(".task-status");
-    if (status && !status.disabled && status.offsetParent) status.focus();
+    const control = row?.querySelector(command === "task-set-priority" ? ".task-priority" : ".task-status");
+    if (control && !control.disabled && control.offsetParent) control.focus();
     else if (tasksView.hidden) refresh.focus();
-    else focusFilter();
+    else focusFilter(command === "task-set-priority" ? priorityFilters : filters);
   }
 
   async function sendWrite(write) {
@@ -1620,7 +2088,7 @@
       closeButton.disabled = true;
       dialogError.textContent = "";
     } else {
-      refreshStatus.textContent = "正在保存任务…";
+      refreshStatus.textContent = t("正在保存任务…");
     }
     const result = await callTool("mutate_worklog_task", {...projectTarget(project), command, request}, 15000);
     isWriting = false;
@@ -1631,12 +2099,12 @@
         dialogError.textContent = result.message;
         for (const control of dialogFields.querySelectorAll("input, textarea, select, button")) control.disabled = true;
         submitButton.disabled = false;
-        submitButton.textContent = "重试原请求";
+        submitButton.textContent = t("重试原请求");
         closeButton.disabled = false;
         submitButton.focus();
       } else {
         refreshStatus.textContent = result.message + " ";
-        const retry = button("重试原请求");
+        const retry = button(t("重试原请求"));
         retry.addEventListener("click", () => { void sendWrite(write); });
         refreshStatus.append(retry);
         retry.focus();
@@ -1647,19 +2115,21 @@
     if (dialog.open) dialog.close();
     const newTask = result.task;
     if (result.state === "ready" && command === "task-create" && newTask) {
+      if (!matchesPriority(newTask)) selectedPriority = "all";
       if (!["all", "active", "TODO"].includes(selectedStatus)) selectedStatus = dashboard ? "active" : "TODO";
       if (selectedProject) selectedProject = projectViewKey(project);
       closedProjects.delete(projectViewKey(project));
     }
     const feedback = result.state === "ready"
-      ? command === "task-create" && newTask ? "已添加 " + newTask.number + "。"
-        : command === "blocker-set" ? "已设置阻塞。"
-        : command === "blocker-resolve" ? "已解除所选阻塞。" : "已保存任务状态。"
-      : result.message || "任务写入失败。";
+      ? command === "task-create" && newTask ? t("已添加 ") + newTask.number + t("。")
+        : command === "task-set-priority" ? t("已保存任务优先级。")
+        : command === "blocker-set" ? t("已设置阻塞。")
+        : command === "blocker-resolve" ? t("已解除所选阻塞。") : t("已保存任务状态。")
+      : result.message || t("任务写入失败。");
     const updatedTask = newTask || task;
     const targetTask = result.state === "ready" && updatedTask ? taskKey(project, updatedTask) : null;
     await refreshProject(feedback, targetTask);
-    focusAfterWrite(project, updatedTask?.id);
+    focusAfterWrite(project, updatedTask?.id, command);
   }
 
   addTask.addEventListener("click", addDialog);
@@ -1697,13 +2167,13 @@
     const address = find(".release-address");
     const retry = find(".update-retry");
     find(".update-name").textContent = title;
-    retry.setAttribute("aria-label", "重试检查 " + title);
+    retry.setAttribute("aria-label", t("重试检查 ") + title);
     let loading = false;
     async function run() {
       if (loading) return;
       loading = true;
       pending.hidden = false;
-      pending.textContent = "正在检查更新…";
+      pending.textContent = t("正在检查更新…");
       resultView.hidden = true;
       link.hidden = true;
       address.hidden = true;
@@ -1712,10 +2182,10 @@
       pending.hidden = true;
       resultView.hidden = false;
       find(".installed-version").textContent = result?.installed_version
-        || (component === "cli" ? "当前使用版本无法确认" : "无法识别");
-      find(".latest-version").textContent = result?.latest_version || "暂无可确认的正式版";
-      find(".update-status").textContent = updateStatuses[result?.status] || "无法判断";
-      const error = result?.state === "ready" ? result.error : result?.message || "检查更新失败。";
+        || (component === "cli" ? t("当前使用版本无法确认") : t("无法识别"));
+      find(".latest-version").textContent = result?.latest_version || t("暂无可确认的正式版");
+      find(".update-status").textContent = t(updateStatuses[result?.status] || "无法判断");
+      const error = result?.state === "ready" ? result.error : result?.message || t("检查更新失败。");
       find(".update-error").hidden = !error;
       find(".update-error").textContent = error || "";
       retry.hidden = !error;
@@ -1729,7 +2199,7 @@
       event.preventDefault();
       const response = await callHost("ui/open-link", { url: link.href });
       if (!openedLink(response)) {
-        address.textContent = "Codex 无法直接打开此链接。可复制地址 " + link.href;
+        address.textContent = t("Codex 无法直接打开此链接。可复制地址 ") + link.href;
         address.hidden = false;
       }
     });
@@ -1737,18 +2207,32 @@
     return { row, run };
   }
 
-  const updates = [
-    createUpdateRow("codex", "Codex GUI"),
-    createUpdateRow("cli", "CLI／Skill"),
-  ];
-  updatesView.append(...updates.map(({ row }) => row));
   checkUpdates.addEventListener("click", async () => {
+    const updates = updateComponents.map(component =>
+      createUpdateRow(component, component === "codex" ? "Codex GUI" : "CLI／Skill"));
+    updatesView.replaceChildren(...updates.map(({row}) => row));
     updatesView.hidden = false;
     checkUpdates.disabled = true;
     await Promise.all(updates.map(({ run }) => run()));
     checkUpdates.disabled = false;
   });
 
+
+  function applyHostContext(context) {
+    applyTheme(context?.theme);
+    const changed = localize(context);
+    checkUpdates.hidden = !updateComponents.length;
+    if (!changed) return;
+    if (dashboard) projectName.textContent = t("项目总览");
+    if (!emptyWorklog.hidden) {
+      emptyWorklog.replaceChildren();
+      showGuide();
+    }
+    if (initializedData && !dialog.open && !isWriting) {
+      if (dashboard) projectOptions(projectFilter, allProjects, t("全部项目"), selectedProject);
+      renderList();
+    }
+  }
 
   window.addEventListener("message", (event) => {
     const message = event.data;
@@ -1759,10 +2243,10 @@
         post({ method: "ui/notifications/initialized" });
         refresh.disabled = false;
         checkUpdates.disabled = false;
-        applyTheme(message.result.hostContext?.theme);
+        applyHostContext(message.result.hostContext);
       } else if (message.error) {
         window.clearTimeout(timeout);
-        showUnavailable({message: "无法连接 Codex 面板。请尝试重新打开面板。"});
+        showUnavailable({message: t("无法连接 Codex 面板。请尝试重新打开面板。")});
       }
       return;
     }
@@ -1779,7 +2263,7 @@
     }
 
     if (message.method === "ui/notifications/host-context-changed") {
-      applyTheme(message.params?.theme);
+      applyHostContext(message.params);
       return;
     }
 

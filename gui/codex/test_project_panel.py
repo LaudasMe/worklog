@@ -13,7 +13,7 @@ from uuid import uuid4
 
 GUI = Path(__file__).resolve().parent
 REPO = GUI.parent.parent
-sys.path[:0] = [str(REPO), str(GUI / "worklog-panel"), str(REPO / "examples")]
+sys.path[:0] = [str(REPO), str(GUI / "worklog-panel"), str(GUI.parent / "shared"), str(REPO / "examples")]
 from context_seed import seed
 from worklog_context import record, record_get
 from worklog_store import (

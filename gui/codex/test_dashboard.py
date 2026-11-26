@@ -3,7 +3,9 @@
 from contextlib import closing
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
@@ -12,9 +14,10 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 GUI = Path(__file__).resolve().parent
-sys.path[:0] = [str(GUI.parent.parent), str(GUI / "worklog-panel")]
+sys.path[:0] = [str(GUI.parent.parent), str(GUI / "worklog-panel"), str(GUI.parent / "shared")]
 
-from server import BLOCKERS, CONTINUE, DASHBOARD, HISTORY, MUTATE, SECTIONS, TOOL, respond
+from panel_tools import BLOCKERS, HISTORY, MUTATE, SECTIONS
+from server import CONTINUE, DASHBOARD, TOOL, respond
 from worklog_context import record, record_get
 from worklog_store import connect, initialize, metadata, open_run, project_db, snapshot, task_position, task_row, write_request
 
@@ -278,6 +281,74 @@ class DashboardTests(unittest.TestCase):
             **scope, "taskId": task["id"], "expectedRevision": task["revision"],
         }, folder=folder)
         return scope, task, options
+
+    def test_priority_updates_in_both_panels_and_cli_share_the_project_and_revision_guards(self):
+        views = self.by_project()
+        alpha, beta = views[str(self.alpha)], views[str(self.beta)]
+        task = self.call(TOOL, folder=self.alpha)["tasks"][0]
+        self.assertIsNone(task["priority"])
+        request = {
+            "operation_id": str(uuid4()), "project_id": alpha["id"], "data_generation": alpha["generation"],
+            "task_id": task["id"], "expected_revision": task["revision"], "priority": "p1",
+        }
+        args = {"projectId": alpha["id"], "command": "task-set-priority", "request": request}
+        saved = self.call(MUTATE, args)
+        self.assertEqual(saved["state"], "ready")
+        self.assertEqual(self.call(MUTATE, args), saved)
+        for view in (self.by_project()[str(self.alpha)], self.call(TOOL, folder=self.alpha)):
+            self.assertEqual(view["tasks"][0]["priority"], "p1")
+        self.assertIsNone(self.by_project()[str(self.beta)]["tasks"][0]["priority"])
+
+        def cli(command, *arguments, request=None):
+            return json.loads(subprocess.check_output(
+                [sys.executable, "-B", str(GUI.parent.parent / "worklog.py"), "--project",
+                 str(self.alpha), command, *arguments],
+                input=json.dumps(request), text=True,
+            ))
+
+        cleared = dict(request, operation_id=str(uuid4()), priority=None)
+        self.assertEqual(self.call(MUTATE, {"command": "task-set-priority", "request": cleared},
+                                   folder=self.alpha)["code"], "revision_conflict")
+        self.assertEqual(cli("context", "--task", task["id"])["result"]["task"]["priority"], "p1")
+        cleared["expected_revision"] = saved["task"]["revision"]
+        self.assertEqual(self.call(MUTATE, {"command": "task-set-priority", "request": cleared},
+                                   folder=self.alpha)["state"], "ready")
+        current = cli("context", "--task", task["id"])["result"]["task"]
+        self.assertIsNone(current["priority"])
+        self.assertTrue(cli("task-set-priority", request=dict(
+            request, operation_id=str(uuid4()), priority="p3", expected_revision=current["revision"],
+        ))["ok"])
+        self.assertEqual(self.call(TOOL, folder=self.alpha)["tasks"][0]["priority"], "p3")
+        current = self.by_project()
+        self.assertEqual(current[str(self.alpha)]["tasks"][0]["priority"], "p3")
+        self.assertEqual(current[str(self.beta)]["tasks"], beta["tasks"])
+
+    def test_entry_titles_and_continue_draft_use_their_selected_languages(self):
+        for host, system, expected in (
+            ("zh-Hans", "en_US.UTF-8", ("workLog 全局总览", "workLog 项目侧栏")),
+            ("en-US", "zh_CN.UTF-8", ("workLog Dashboard", "workLog Project Sidebar")),
+            (None, "zh_CN.UTF-8", ("workLog 全局总览", "workLog 项目侧栏")),
+            ("ja-JP", "zh_CN.UTF-8", ("workLog Dashboard", "workLog Project Sidebar")),
+        ):
+            panel = {}
+            with patch.dict(os.environ, {"LC_ALL": system}):
+                respond({"id": 1, "method": "initialize", "params": {"_meta": {"locale": host}}}, panel)
+                result = respond({"id": 2, "method": "tools/list"}, panel)["result"]["tools"]
+            titles = {tool["name"]: tool["title"] for tool in result}
+            self.assertEqual((titles[DASHBOARD["name"]], titles[TOOL["name"]]), expected)
+
+        dashboard = self.by_project()[str(self.alpha)]
+        self.call(TOOL, folder=self.alpha)
+        for folder in (None, self.alpha):
+            target = {} if folder else {"projectId": dashboard["id"]}
+            draft = self.call(CONTINUE, {
+                **target, "taskId": self.tasks[self.alpha], "locale": "en",
+            }, folder=folder)
+            query = parse_qs(urlsplit(draft["url"]).query)
+            self.assertEqual(query["path"], [str(self.alpha)])
+            self.assertIn("Use the workLog Skill to continue T001", query["prompt"][0])
+            self.assertIn(dashboard["generation"], query["prompt"][0])
+            self.assertIn(self.tasks[self.alpha], query["prompt"][0])
 
     def blocker_request(self, target, command="blocker-set", **fields):
         scope, task, options = target

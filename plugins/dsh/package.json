@@ -1,0 +1,26 @@
+{
+  "name": "worklog-dsh",
+  "version": "0.1.0",
+  "description": "workLog Dashboard, project sidebar and Skill for DeepSeek Harness.",
+  "type": "module",
+  "engines": {
+    "dsh": "0.2.2-rc.5"
+  },
+  "exports": {
+    ".": "./host.mjs",
+    "./client": "./client.js"
+  },
+  "files": ["host.mjs", "client.js", "cordis.patch.yml", "skills"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-session"
+      ]
+    }
+  }
+}

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 GUI = Path(__file__).resolve().parent
 REPO = GUI.parent.parent
-sys.path[:0] = [str(REPO), str(GUI / "worklog-panel")]
+sys.path[:0] = [str(REPO), str(GUI.parent / "shared")]
 from task_actions import completion_options, mutate_task
 from worklog_context import context, record
 from worklog_store import (

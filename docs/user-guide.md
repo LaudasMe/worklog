@@ -2,7 +2,7 @@
 
 workLog 在项目里保存任务、待办、进展和交接记录。你可以在 Codex 记下做到哪里，再用 OpenCode 或另一个 Codex 聊天打开同一个项目，读回原文并继续工作。
 
-本指南适用于 **CLI／Skill v0.5.0** 和 **Codex GUI 0.2.0**。
+本指南适用于 **CLI／Skill v0.6.0** 和 **Codex GUI 0.3.0**。
 
 ## 1. 安装
 
@@ -11,16 +11,16 @@ workLog 在项目里保存任务、待办、进展和交接记录。你可以在
 准备支持本地插件的 Codex 桌面端和 Python 3.9 或以上版本。打开终端，执行下面的命令安装 Dashboard、项目侧栏及随包的 CLI 和 Skill。
 
 ```sh
-(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
+(worklog_installer="$(curl -fsSL https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-codex.sh)" && /bin/bash -c "$worklog_installer")
 ```
 
-脚本会下载并校验完整安装包。安装器提示是否替换现有 CLI／Skill 时，输入 `y` 确认替换，直接按回车则保留原安装。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 0.2.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0)
+脚本会下载并校验完整安装包。安装器会校验实际共享资源。如果现有 Skill 不兼容，需先完成更新。仅有旧路径或两份 Skill 并存时，安装器会询问是否迁移。装好后重启 Codex。项目级 Skill 由各项目单独维护，可以从新聊天里查询实际使用的版本。 [Codex GUI 0.3.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0)
 
-也可下载[完整安装包](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/worklog-codex-gui-v0.2.0-full.zip)和 [SHA-256 校验文件](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/SHA256SUMS)，在下载目录运行 `shasum -a 256 -c SHA256SUMS --ignore-missing`。确认完整 ZIP 的校验结果为 `OK`，解压后在包目录运行 `python3 -B install.py`。需要指定 Codex CLI 时，可追加 `--codex /absolute/path/to/codex`。
+也可下载[完整安装包](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/worklog-codex-gui-v0.3.0-full.zip)和 [SHA-256 校验文件](https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/SHA256SUMS)，在下载目录运行 `shasum -a 256 -c SHA256SUMS --ignore-missing`。确认完整 ZIP 的校验结果为 `OK`，解压后在包目录运行 `python3 -B install.py`。需要指定 Codex CLI 时，可追加 `--codex /absolute/path/to/codex`。
 
 ### 在 OpenCode 或 Codex 中单独安装 Skill
 
-如果你使用 OpenCode，或者只需要聊天中的 workLog 操作，可以单独安装 Skill。准备 Python 3.9 或以上版本和 `unzip`，从发布页把 `worklog-skill-v0.5.0.zip` 和 `SHA256SUMS` 下载到同一目录。将以下两个路径换成实际绝对路径。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.5.0)
+如果你使用 OpenCode，或者只需要聊天中的 workLog 操作，可以单独安装 Skill。准备 Python 3.9 或以上版本和 `unzip`，从发布页把 `worklog-skill-v0.6.0.zip` 和 `SHA256SUMS` 下载到同一目录。将以下两个路径换成实际绝对路径。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.6.0)
 
 ```sh
 PROJECT_ROOT="/absolute/path/to/your-project"
@@ -30,7 +30,7 @@ SKILLS_DIR="$PROJECT_ROOT/.agents/skills"
 (cd "$DOWNLOAD_DIR" && shasum -a 256 -c SHA256SUMS) &&
   mkdir -p "$SKILLS_DIR" &&
   test ! -e "$SKILLS_DIR/worklog" &&
-  unzip -n "$DOWNLOAD_DIR/worklog-skill-v0.5.0.zip" -d "$SKILLS_DIR" &&
+  unzip -n "$DOWNLOAD_DIR/worklog-skill-v0.6.0.zip" -d "$SKILLS_DIR" &&
   python3 -B "$SKILLS_DIR/worklog/scripts/worklog.py" release-version
 ```
 
@@ -124,7 +124,7 @@ python3 -B "$CLI" release-version
 python3 -B "$CLI" check-update
 ```
 
-`release-version` 返回安装包的发布版本，例如 `v0.5.0`。`--version` 返回 CLI 协议版本，例如 `2.0`。检查到新版本后，打开对应组件的 Release 链接手动安装。单独升级 Skill 时，先把新 ZIP 解压到临时目录，运行其中的 `scripts/worklog.py release-version` 核对版本，再替换实际使用的整套 Skill 目录并开启新聊天。 [Skill 安装与更新说明](skill.md)
+`release-version` 返回安装包的发布版本，例如 `v0.6.0`。`--version` 返回 CLI 协议版本，例如 `2.0`。检查到新版本后，打开对应组件的 Release 链接手动安装。单独升级 Skill 时，先把新 ZIP 解压到临时目录，运行其中的 `scripts/worklog.py release-version` 核对版本，再替换实际使用的整套 Skill 目录并开启新聊天。 [Skill 安装与更新说明](skill.md)
 
 ### 升级已有的项目数据库
 

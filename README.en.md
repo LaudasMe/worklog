@@ -11,7 +11,13 @@ workLog turns information scattered across your chats with an agent into tasks, 
 - **Keep project data local.** Each project has its own SQLite database in `.worklog/` at the project root. The CLI can run on its own and provides a read-only interface for other tools.
 - **Bridge task across Agents.** Record your task context, progress and goal independent of agents. Your tasks could be continued from codex to DSH.
 
-## What's new in GUI 0.2.0 and CLI / Skill v0.5.0
+## GUI 0.3.0, CLI / Skill v0.6.0, and DSH plugin 0.1.0
+
+- View, set, and clear task priorities in the Codex Dashboard and Project Sidebar. Combine priority and status filters.
+- Both panels support Simplified Chinese and English. Existing tasks, records, and SQLite databases continue to work.
+- The shared panel installs with the workLog Skill. DeepSeek Harness Desktop 0.2.2-rc.5 can install a standalone plugin with the CLI, Skill, Dashboard, and Project Sidebar.
+
+## Highlights from the previous release
 
 - **Pick up work in a new chat.** Authorize workLog to follow one or more tasks in Codex. A new chat can read saved progress, to-dos, and blockers, then save its own results with their source. Completing the whole task still requires a separate confirmation.
 - **Manage blockers and to-dos from either panel.** Set and clear blockers one at a time in the Dashboard or project sidebar. Both show to-do outcomes and their explanations. Recording an outcome for an older to-do preserves the original entry and completion evidence.
@@ -31,7 +37,7 @@ Please install the workLog CLI and its general-purpose Skill on this computer. D
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing user-level installation, it keeps that version and shows its location. After installation, start a new chat and load the `worklog` Skill. [CLI and Skill release](https://github.com/floohubAI/worklog/releases/tag/v0.5.0) · [Manual installation and upgrades (Chinese)](docs/skill.md)
+The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing user-level installation, it keeps that version and shows its location. After installation, start a new chat and load the `worklog` Skill. [CLI and Skill release](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) · [Manual installation and upgrades (Chinese)](docs/skill.md)
 
 ### GUI edition (Codex desktop)
 
@@ -41,10 +47,14 @@ Copy the entire block below into your Codex chat.
 
 ```text
 Please install the workLog Codex GUI on this Mac. Download the official installer below, run it with Bash, and tell me whether the installation succeeded.
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-codex.sh
 ```
 
-Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.2.0 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
+Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.3.0 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
+
+### DeepSeek Harness desktop plugin
+
+The plugin supports DSH Desktop 0.2.2-rc.5. Download the standalone package and use the bundled `dsh` command to install it. [DSH plugin 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [Installation guide (Chinese)](plugins/dsh/README.md)
 
 ## Getting started
 
