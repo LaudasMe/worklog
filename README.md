@@ -9,13 +9,14 @@ workLog 把和 Agent 聊天时确认的工作整理成任务、待办和进展�
 - **从聊天里提取要做的事**。Agent 根据上下文把已明确的工作整理成任务和待办，并列出需要确认的问题。
 - **按任务追踪进展**。把结果、决定、待办的处理情况和下一步记到对应任务上。之后按任务编号就能查回记录和完成依据。
 - **记录保存在项目本地**。每个项目都有独立的 SQLite 数据库，位于项目根目录的 `.worklog/`。CLI 可单独使用，并提供只读接口供其他工具查询。
-- **跨客户端任务接力**。可作为多个本地Agent客户端的任务接力，Codex发起任务后，DSH接续任务，不丢失关键信息，不用手动复制提示词。
+- **跨客户端任务接力**。在 Codex 创建任务，由 DeepSeek Harness 接手并保存，再到 OpenCode 读回同一项目的任务和记录。
 
-## GUI 0.3.0、CLI／Skill v0.6.0 和 DSH 插件 0.1.0
+## 本版功能
 
 - 在 Codex Dashboard 和项目侧栏查看、修改和清空任务优先级，并按状态和优先级组合筛选。
 - 两个面板支持简体中文和英文。原有任务、记录与 SQLite 数据可继续使用。
 - 共享页面随 workLog Skill 安装。DeepSeek Harness Desktop 0.2.2-rc.5 可以安装包含 CLI／Skill、Dashboard 和项目侧栏的独立插件。
+- OpenCode GUI 0.1.0 已在 OpenCode Desktop 2.4.2 验证。没有聊天时也可从主页打开 Dashboard。
 
 ## 上一版的主要功能
 
@@ -26,18 +27,25 @@ workLog 把和 Agent 聊天时确认的工作整理成任务、待办和进展�
 
 ## 安装
 
-选择一个版本，把对应的安装指令复制到能在本机执行命令的 Agent 客户端。
+按你使用的客户端选择安装方式。 [完整安装与升级指南](docs/user-guide.md#1-安装)
+
+| 组件 | 正式版 | 接下来怎么装 |
+| --- | --- | --- |
+| 通用 CLI／Skill | [v0.6.0](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) | [运行通用安装脚本](#cli-版通用-skill)，适用于 macOS 和 Linux |
+| Codex GUI | [0.3.0](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) | [运行完整包安装脚本](#gui-版codex-桌面端)，包含 CLI／Skill |
+| DSH 插件 | [0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) | [下载并用 `dsh` 安装 TGZ](plugins/dsh/README.md#安装)，包含 CLI／Skill |
+| OpenCode GUI | [0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) | 先安装通用 CLI／Skill，再[解包并登记 GUI](gui/opencode/README.md#安装) |
 
 ### CLI 版（通用 Skill）
 
-适用于装有 Python 3.9 或更新版本的 macOS 和 Linux。把下列完整内容复制给你的Agent。
+适用于装有 Python 3.9 或更新版本和 `curl` 的 macOS 和 Linux。把下列完整内容复制给你的 Agent。
 
 ```text
 请在这台电脑上安装 workLog CLI 和通用 Skill。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果和安装位置。
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) · [手动安装与升级](docs/skill.md)
+脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。发现用户级安装或 Codex 旧路径的安装时，会显示实际位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [手动安装与升级](docs/user-guide.md#6-检查更新与升级)
 
 ### GUI 版（Codex 桌面端）
 
@@ -50,15 +58,15 @@ https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-codex.sh
 ```
 
-安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.3.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
+需要替换或迁移旧 Skill 时，请在交互式终端运行安装脚本并按提示确认。安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.3.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [安装与迁移](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ### DeepSeek Harness 桌面插件
 
-使用 DSH Desktop 0.2.2-rc.5。下载独立安装包，按插件说明通过随附的 `dsh` 安装。 [DSH 插件 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [安装步骤](plugins/dsh/README.md)
+已验证 DeepSeek Harness Desktop 0.2.2-rc.5。下载并校验 TGZ，通过随附的 `dsh` 安装后重启。 [安装步骤](docs/user-guide.md#在-deepseek-harness-桌面安装插件)
 
 ### OpenCode 桌面插件
 
-OpenCode Desktop 2.4.2 可安装独立的 workLog GUI。先安装 CLI／Skill v0.6.0，再注册 OpenCode 插件。 [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [安装步骤](gui/opencode/README.md)
+已验证 macOS arm64 的 OpenCode Desktop 2.4.2。先将 CLI／Skill v0.6.0 安装到 `~/.agents/skills/worklog/`，再解包并登记独立 GUI。 [安装步骤](docs/user-guide.md#在-opencode-桌面安装-gui)
 
 ## 三个使用场景
 
@@ -67,17 +75,18 @@ OpenCode Desktop 2.4.2 可安装独立的 workLog GUI。先安装 CLI／Skill v0
 ### 1. 新建任务
 
 - **CLI 版**。讨论清楚后，在聊天中说「用 workLog 把刚才确认的订单金额核对建成任务，把核对普通订单和核对零金额订单分别列为待办。」
-- **GUI 版**。在 Codex 聊天中发送同样的指令。打开项目侧栏（入口见下方），点「刷新」即可看到新任务。
+- **Codex GUI**。在 Codex 聊天中发送同样的指令。打开项目侧栏（入口见下方），点「刷新」即可看到新任务。
 
 ### 2. 更新任务
 
 - **CLI 版**。有新结果时，说「用 workLog 更新 T001。零金额订单已核对，下一步抽查退款订单。」用 workLog 返回的任务编号替换 `T001`。
-- **GUI 版**。在 Dashboard 或项目侧栏点「继续任务」，打开项目管理目录下的可编辑聊天草稿。发送预填草稿即可授权该聊天跟进任务。保存后点「刷新」，查看更新。
+- **Codex GUI**。在 Dashboard 或项目侧栏点「继续任务」，打开项目管理目录下的可编辑聊天草稿。发送预填草稿即可授权该聊天跟进任务。保存后点「刷新」，查看更新。
+- **DSH 或 OpenCode**。在同一项目目录开启本地聊天，使用 Skill 接手和保存。 [跨客户端接力](docs/user-guide.md#在-codexdeepseek-harness-和-opencode-之间交接)
 
 ### 3. 查看任务
 
 - **CLI 版**。在聊天中说「用 workLog 查看 T001 的进展、未完成的待办和下一步。」还不知道任务编号时，可以先问「当前项目有哪些任务还没结束？」
-- **GUI 版**。先打开本地聊天的右边栏，然后选择「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。可以按状态筛选任务，点开任务查看待办和历史记录。 [打开侧栏](docs/user-guide.md#3-在-codex-侧栏查看任务)
+- **Codex GUI**。先打开本地聊天的右边栏，然后选择「＋ → 更多工具 → 插件和 MCP → workLog 项目侧栏」。可以按状态筛选任务，点开任务查看待办和历史记录。 [打开侧栏](docs/user-guide.md#3-在-codex-侧栏查看任务)
 
 ## 界面预览
 

@@ -9,13 +9,14 @@ workLog turns information scattered across your chats with an agent into tasks, 
 - **Find action items in chat.** The agent turns agreed work into tasks and to-dos and lists questions that still need a decision.
 - **Track progress by task.** Save results, decisions, updates to to-dos, and next steps under the relevant task. Use the task ID to find its history and evidence of completion later.
 - **Keep project data local.** Each project has its own SQLite database in `.worklog/` at the project root. The CLI can run on its own and provides a read-only interface for other tools.
-- **Bridge task across Agents.** Record your task context, progress and goal independent of agents. Your tasks could be continued from codex to DSH.
+- **Hand work across clients.** Create a task in Codex, pick it up and save progress in DeepSeek Harness, then read the same task and records in OpenCode.
 
-## GUI 0.3.0, CLI / Skill v0.6.0, and DSH plugin 0.1.0
+## What's new
 
 - View, set, and clear task priorities in the Codex Dashboard and Project Sidebar. Combine priority and status filters.
 - Both panels support Simplified Chinese and English. Existing tasks, records, and SQLite databases continue to work.
 - The shared panel installs with the workLog Skill. DeepSeek Harness Desktop 0.2.2-rc.5 can install a standalone plugin with the CLI, Skill, Dashboard, and Project Sidebar.
+- OpenCode GUI 0.1.0 was verified on OpenCode Desktop 2.4.2. Its Dashboard is available from the home screen with no chat open.
 
 ## Highlights from the previous release
 
@@ -26,18 +27,25 @@ workLog turns information scattered across your chats with an agent into tasks, 
 
 ## Installation
 
-Choose an edition and paste its installation prompt into an agent client that can run commands on your computer.
+Choose the installation for your client. [Full installation and upgrade guide (Chinese)](docs/user-guide.md#1-安装)
+
+| Component | Release | Installation |
+| --- | --- | --- |
+| General-purpose CLI and Skill | [v0.6.0](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) | [Run the installer](#cli-edition-general-purpose-skill) on macOS or Linux |
+| Codex GUI | [0.3.0](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) | [Run the full installer](#gui-edition-codex-desktop), which includes the CLI and Skill |
+| DSH plugin | [0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) | [Install the TGZ via `dsh`](#deepseek-harness-desktop-plugin), which includes the CLI and Skill |
+| OpenCode GUI | [0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) | Install the general-purpose Skill first, then [register the GUI](#opencode-desktop-plugin) |
 
 ### CLI edition (general-purpose Skill)
 
-Requires macOS or Linux with Python 3.9 or later. Copy the entire block below into your agent chat.
+Requires macOS or Linux with Python 3.9 or later and `curl`. Copy the entire block below into your agent chat.
 
 ```text
 Please install the workLog CLI and its general-purpose Skill on this computer. Download the official installer below, run it with Bash, and tell me whether the installation succeeded and where it was installed.
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing user-level installation, it keeps that version and shows its location. After installation, start a new chat and load the `worklog` Skill. [CLI and Skill release](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) · [Manual installation and upgrades (Chinese)](docs/skill.md)
+The installer verifies the release package and installs the CLI and Skill to `~/.agents/skills/worklog`. If it finds an existing installation in the user-wide or legacy Codex location, it reports that path and keeps the installed version. After installation, start a new chat and load the `worklog` Skill. [Manual installation and upgrades (Chinese)](docs/user-guide.md#6-检查更新与升级)
 
 ### GUI edition (Codex desktop)
 
@@ -50,15 +58,15 @@ Please install the workLog Codex GUI on this Mac. Download the official installe
 https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-codex.sh
 ```
 
-Restart Codex when the installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.3.0 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [Manual installation (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
+If the installer needs to replace or migrate an existing Skill, run it in an interactive terminal and answer its prompts. Restart Codex when installation finishes. Open **workLog Dashboard** from the app list in the main sidebar, or open the workLog project sidebar on the right of a local project chat. [Codex GUI 0.3.0 release](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [Installation and migration (Chinese)](docs/user-guide.md#在-macos-上安装-codex-gui)
 
 ### DeepSeek Harness desktop plugin
 
-The plugin supports DSH Desktop 0.2.2-rc.5. Download the standalone package and use the bundled `dsh` command to install it. [DSH plugin 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [Installation guide (Chinese)](plugins/dsh/README.md)
+Verified with DeepSeek Harness Desktop 0.2.2-rc.5. Download and verify the TGZ, install it with the bundled `dsh` command, and restart the app. [Installation guide (Chinese)](docs/user-guide.md#在-deepseek-harness-桌面安装插件)
 
 ### OpenCode desktop plugin
 
-OpenCode Desktop 2.4.2 supports the standalone workLog GUI. Install CLI / Skill v0.6.0 before registering the OpenCode plugin. [OpenCode GUI 0.1.0](https://github.com/floohubAI/worklog/releases/tag/gui-opencode-v0.1.0) · [Installation guide (Chinese)](gui/opencode/README.md)
+Verified with OpenCode Desktop 2.4.2 on macOS arm64. Install CLI and Skill v0.6.0 to `~/.agents/skills/worklog/`, then extract and register the separate GUI plugin. [Installation guide (Chinese)](docs/user-guide.md#在-opencode-桌面安装-gui)
 
 ## Getting started
 
@@ -67,17 +75,18 @@ Start a chat from your project's root directory and load the `worklog` Skill. If
 ### 1. Create a task
 
 - **CLI edition.** Once you've agreed on the work, say “Use workLog to create a task to verify the order amounts we just discussed. Add one to-do for regular orders and another for zero-amount orders.”
-- **GUI edition.** Send the same request in Codex. Open the project sidebar as described below and click **Refresh** (`刷新`) to see the new task.
+- **Codex GUI.** Send the same request in Codex. Open the project sidebar as described below and click **Refresh** (`刷新`) to see the new task.
 
 ### 2. Update a task
 
 - **CLI edition.** When you have new results, say “Use workLog to update T001. The zero-amount orders are verified. Next, spot-check the refunds.” Replace `T001` with the task ID that workLog returned.
-- **GUI edition.** Click **Continue task** (`继续任务`) in the Dashboard or project sidebar to open an editable chat draft in the project's workLog directory. Send the prefilled draft to authorize that chat to follow the task. Click **Refresh** (`刷新`) after saving an update.
+- **Codex GUI.** Click **Continue task** (`继续任务`) in the Dashboard or project sidebar to open an editable chat draft in the project's workLog directory. Send the prefilled draft to authorize that chat to follow the task. Click **Refresh** (`刷新`) after saving an update.
+- **DSH or OpenCode.** Open a local chat in the same project directory and use the Skill to pick up the task and save progress. [Handoff between clients (Chinese)](docs/user-guide.md#在-codexdeepseek-harness-和-opencode-之间交接)
 
 ### 3. View a task
 
 - **CLI edition.** Say “Use workLog to show the progress, open to-dos, and next step for T001.” If you don't know the task ID yet, ask “Which tasks are still open in this project?”
-- **GUI edition.** In a local Codex chat, open the right sidebar and select **+ → More tools → Plugins and MCP → workLog 项目侧栏** (workLog Project Sidebar). Filter tasks by status and expand a task to see its to-dos and history. [Open the sidebar (Chinese)](docs/user-guide.md#3-在-codex-侧栏查看任务)
+- **Codex GUI.** In a local Codex chat, open the right sidebar and select **+ → More tools → Plugins and MCP → workLog 项目侧栏** (workLog Project Sidebar). Filter tasks by status and expand a task to see its to-dos and history. [Open the sidebar (Chinese)](docs/user-guide.md#3-在-codex-侧栏查看任务)
 
 ## Screenshots
 
