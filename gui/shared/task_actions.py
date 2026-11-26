@@ -1,4 +1,4 @@
-"""Codex 双端的任务操作，使用现有 workLog 本地写入规则。"""
+"""共享面板的任务操作，使用现有 workLog 本地写入规则。"""
 
 from contextlib import closing
 import json
@@ -16,6 +16,7 @@ from worklog_store import (
 
 ACTION_FIELDS = {
     "task-create": ("title",),
+    "task-set-priority": ("priority",),
     **{command: () for command in TASK_TRANSITIONS},
     "task-cancel": ("reason",),
     "task-reopen": ("reason",),
@@ -104,7 +105,9 @@ def completion_options(db, task, expected_revision):
 
 def blocker_run(db, task, source):
     active = open_run(db, task["task_id"])
-    if active is not None and (source[0] != "codex" or (active["client"], active["session_id"]) != source):
+    if active is not None and (
+        source[0] not in {"codex", "dsh", "opencode"} or (active["client"], active["session_id"]) != source
+    ):
         raise WorklogError("handoff_required", "Hand off the active task run before editing blockers.")
     return active["run_id"] if active else None
 

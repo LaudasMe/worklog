@@ -11,7 +11,13 @@ workLog 把和 Agent 聊天时确认的工作整理成任务、待办和进展�
 - **记录保存在项目本地**。每个项目都有独立的 SQLite 数据库，位于项目根目录的 `.worklog/`。CLI 可单独使用，并提供只读接口供其他工具查询。
 - **跨客户端任务接力**。可作为多个本地Agent客户端的任务接力，Codex发起任务后，DSH接续任务，不丢失关键信息，不用手动复制提示词。
 
-## GUI 0.2.0 和 CLI／Skill v0.5.0 的新功能
+## GUI 0.3.0、CLI／Skill v0.6.0 和 DSH 插件 0.1.0
+
+- 在 Codex Dashboard 和项目侧栏查看、修改和清空任务优先级，并按状态和优先级组合筛选。
+- 两个面板支持简体中文和英文。原有任务、记录与 SQLite 数据可继续使用。
+- 共享页面随 workLog Skill 安装。DeepSeek Harness Desktop 0.2.2-rc.5 可以安装包含 CLI／Skill、Dashboard 和项目侧栏的独立插件。
+
+## 上一版的主要功能
 
 - **跨聊天继续任务**。明确授权后，workLog 可以在一个 Codex 聊天跟进一个或多个任务。换到新聊天可以读回进展、待办和阻塞，再保存带来源的成果。整项任务完成仍需单独确认。
 - **在两个面板管理阻塞和待办**。Dashboard 和项目侧栏均可设置和逐条解除阻塞，显示待办的「已处置」或「已解决」及说明。补录旧待办时保留原文和原完成依据。
@@ -31,7 +37,7 @@ workLog 把和 Agent 聊天时确认的工作整理成任务、待办和进展�
 https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 ```
 
-脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.5.0) · [手动安装与升级](docs/skill.md)
+脚本会校验发布包，将 CLI 和通用 Skill 安装到 `~/.agents/skills/worklog`。检测到已有用户级安装时，会显示安装位置并保留原版本。安装后新建聊天并加载 `worklog` Skill。 [CLI／Skill 发布页](https://github.com/floohubAI/worklog/releases/tag/v0.6.0) · [手动安装与升级](docs/skill.md)
 
 ### GUI 版（Codex 桌面端）
 
@@ -41,10 +47,14 @@ https://raw.githubusercontent.com/floohubAI/worklog/main/scripts/install-cli.sh
 
 ```text
 请在这台 Mac 上安装 workLog 的 Codex GUI 版。请下载下面的官方安装脚本，用 Bash 运行，并告诉我安装结果。
-https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.2.0/install-codex.sh
+https://github.com/floohubAI/worklog/releases/download/gui-codex-v0.3.0/install-codex.sh
 ```
 
-安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.2.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.2.0) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
+安装完成后重启 Codex。从主侧栏应用列表打开 **workLog Dashboard**，或在项目的本地聊天右侧打开「workLog 项目侧栏」。 [Codex GUI 0.3.0 发布页](https://github.com/floohubAI/worklog/releases/tag/gui-codex-v0.3.0) · [手动安装](docs/user-guide.md#在-macos-上安装-codex-gui)
+
+### DeepSeek Harness 桌面插件
+
+使用 DSH Desktop 0.2.2-rc.5。下载独立安装包，按插件说明通过随附的 `dsh` 安装。 [DSH 插件 0.1.0](https://github.com/floohubAI/worklog/releases/tag/dsh-v0.1.0) · [安装步骤](plugins/dsh/README.md)
 
 ## 三个使用场景
 

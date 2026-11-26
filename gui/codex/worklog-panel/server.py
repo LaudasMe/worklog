@@ -3,24 +3,31 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
+import re
 from shlex import quote as shell_quote
 import sys
 from threading import Lock
 from urllib.parse import quote, urlencode
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "runtime"))
+
 from project_panel import (
-    READ_ERRORS, PanelError, locate_project, read_handoff, read_history, registered_target,
-    task_reader, task_sections, unavailable, view_dashboard, view_project,
+    READ_ERRORS, PanelError, locate_project, registered_target, task_reader, view_dashboard, view_project,
 )
-from task_actions import ACTION_FIELDS, action_unavailable, blocker_options, completion_options, mutate_task
+from panel_tools import (
+    IDENTIFIER, TASK_TOOLS, adapter_result, app_tool, run_task_tool, valid_arguments,
+)
 from codex_skill_version import current_skill_version
+from panel_assets import SharedResourceError, load_panel_assets, user_skill_path
 from worklog_release import check_update, read_release_version
 from worklog_store import TERMINAL_TASK_STATES
 
 PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"}
 RESOURCE_URI = "ui://worklog-codex-panel/panel"
 DASHBOARD_URI = "ui://worklog-codex-panel/dashboard"
+DASHBOARD_UNAVAILABLE_URI = f"{DASHBOARD_URI}/unavailable"
 MIME_TYPE = "text/html;profile=mcp-app"
 TOOL = {
     "name": "open_worklog_codex_panel",
@@ -43,41 +50,10 @@ DASHBOARD = {
         "openai/ui": {"entrypoints": [{"type": "global"}]},
     },
 }
-RESOURCES = {
-    uri: {"uri": uri, "name": tool["title"], "mimeType": MIME_TYPE}
-    for uri, tool in ((RESOURCE_URI, TOOL), (DASHBOARD_URI, DASHBOARD))
+ENTRY_TITLES = {
+    TOOL["name"]: {"zh-Hans": "workLog 项目侧栏", "en": "workLog Project Sidebar"},
+    DASHBOARD["name"]: {"zh-Hans": "workLog 全局总览", "en": "workLog Dashboard"},
 }
-
-
-def app_tool(name, title, description, properties, *, open_world=False, project=False, write=False):
-    return {
-        "name": name,
-        "title": title,
-        "description": description,
-        "inputSchema": {
-            "type": "object", "required": list(properties),
-            "properties": {**properties, **({"projectId": IDENTIFIER} if project else {})},
-            "additionalProperties": False,
-        },
-        "annotations": {"readOnlyHint": not write, "openWorldHint": open_world},
-        "_meta": {"ui": {"visibility": ["app"]}},
-    }
-
-
-IDENTIFIER = {"type": "string", "minLength": 1, "maxLength": 128}
-HANDOFF = app_tool(
-    "read_worklog_codex_handoff", "读取交接原文", "按侧栏当前任务读取该任务的最近一次交接原文。",
-    {"taskId": IDENTIFIER, "entryId": IDENTIFIER}, project=True,
-)
-SECTIONS = app_tool(
-    "read_worklog_task_sections", "读取待办和历史", "读取当前任务的待办和历史摘要。",
-    {"taskId": IDENTIFIER}, project=True,
-)
-HISTORY = app_tool(
-    "read_worklog_history", "读取历史原文", "读取当前任务中的一条历史记录。",
-    {"taskId": IDENTIFIER, "source": {"type": "string", "enum": ["entry", "record", "change"]},
-     "recordId": IDENTIFIER}, project=True,
-)
 UPDATE = app_tool(
     "check_worklog_update", "检查 workLog 更新", "手动检查一个 workLog 组件的 GitHub 正式版本。",
     {"component": {"type": "string", "enum": ["codex", "cli"]}}, open_world=True,
@@ -86,23 +62,9 @@ CONTINUE = app_tool(
     "prepare_worklog_continue", "准备继续任务的草稿", "核对任务归属并准备 Codex 新聊天链接。",
     {"taskId": IDENTIFIER}, project=True,
 )
-COMPLETION = app_tool(
-    "read_worklog_completion_options", "读取完成任务的依据与待办", "读取任务的可用完成依据及开放事项。",
-    {"taskId": IDENTIFIER, "expectedRevision": {"type": "integer", "minimum": 1}}, project=True,
-)
-BLOCKERS = app_tool(
-    "read_worklog_blocker_options", "读取任务阻塞", "核对接手归属并读取当前任务的生效阻塞。",
-    {"taskId": IDENTIFIER, "expectedRevision": {"type": "integer", "minimum": 1}}, project=True,
-)
-MUTATE = app_tool(
-    "mutate_worklog_task", "保存任务操作", "按项目和任务版本校验并保存用户提交的任务操作。",
-    {"command": {"type": "string", "enum": list(ACTION_FIELDS)}, "request": {"type": "object"}},
-    project=True, write=True,
-)
-TOOLS = {
-    tool["name"]: tool
-    for tool in (TOOL, DASHBOARD, HANDOFF, SECTIONS, HISTORY, UPDATE, CONTINUE, COMPLETION, BLOCKERS, MUTATE)
-}
+CONTINUE["inputSchema"]["properties"]["locale"] = {"type": "string", "enum": ["zh-Hans", "en"]}
+TOOLS = {tool["name"]: tool for tool in (TOOL, DASHBOARD, UPDATE, CONTINUE)}
+TOOLS.update(TASK_TOOLS)
 GUI_MANIFEST = Path(__file__).resolve().with_name("release-version.json")
 THREAD_BINDING_LOCK = Lock()
 
@@ -113,24 +75,6 @@ def update_component(component, thread_id):
     else:
         installed = current_skill_version(thread_id)
     return {"state": "ready", "component": component, **check_update(component, installed)}
-
-
-def valid_arguments(tool, arguments):
-    schema = tool["inputSchema"]
-    properties = schema["properties"]
-    if not isinstance(arguments, dict) or not set(schema.get("required", ())) <= arguments.keys() <= properties.keys():
-        return False
-    for key, value in arguments.items():
-        check = properties[key]
-        if check["type"] == "string" and (
-            not isinstance(value, str) or not 0 < len(value) <= 128 or value not in check.get("enum", (value,))
-        ):
-            return False
-        if check["type"] == "integer" and (type(value) is not int or value < check["minimum"]):
-            return False
-        if check["type"] == "object" and not isinstance(value, dict):
-            return False
-    return True
 
 
 def bind_thread(params, panel):
@@ -163,17 +107,29 @@ def target_project(params, panel, project_id):
     return root, expected_project
 
 
-def prepare_continue(root, task, project_key):
+def prepare_continue(root, task, project_key, language):
     if task["status"] in TERMINAL_TASK_STATES:
         raise PanelError("任务已完成或取消。请刷新任务列表。", "terminal_task")
     path = json.dumps(str(root), ensure_ascii=False)
-    prompt = (
-        f'请使用 workLog Skill 继续 {task["number"]}。我授权本聊天持续跟进这项任务，保存确认过的阶段进展、具体待办和阻塞。'
-        f'请先核对当前聊天的实际工作目录（pwd -P）为 {path}，并用 workLog CLI 显式指定 --project {shell_quote(str(root))}。'
-        f'核对项目 ID {project_key[0]}、数据代次 {project_key[1]} 和任务 ID {task["task_id"]}。'
-        '如目录或身份不符，请告知我并停止。核对一致后，读取任务的最新进展、下一步、待办、阻塞和接手状态。'
-        '有其他会话或客户端有效接手时，请先说明如何交接，待交接或我明确确认替换后再写入。'
-    )
+    if language == "en":
+        prompt = (
+            f'Use the workLog Skill to continue {task["number"]}. I authorize this chat to follow the task '
+            'and save verified progress, concrete to-do items, and blockers. '
+            f'Confirm the actual working directory (pwd -P) is {path}, and pass '
+            f'--project {shell_quote(str(root))} explicitly to the workLog CLI. '
+            f'Verify project ID {project_key[0]}, data generation {project_key[1]}, and task ID {task["task_id"]}. '
+            'If the directory or identity differs, tell me and stop. Otherwise, read the latest progress, next step, '
+            'to-do items, blockers, and current claim. If another chat or client owns an active run, '
+            'explain how to hand it off and wait for the handoff or my explicit approval before writing.'
+        )
+    else:
+        prompt = (
+            f'请使用 workLog Skill 继续 {task["number"]}。我授权本聊天持续跟进这项任务，保存确认过的阶段进展、具体待办和阻塞。'
+            f'请先核对当前聊天的实际工作目录（pwd -P）为 {path}，并用 workLog CLI 显式指定 --project {shell_quote(str(root))}。'
+            f'核对项目 ID {project_key[0]}、数据代次 {project_key[1]} 和任务 ID {task["task_id"]}。'
+            '如目录或身份不符，请告知我并停止。核对一致后，读取任务的最新进展、下一步、待办、阻塞和接手状态。'
+            '有其他会话或客户端有效接手时，请先说明如何交接，待交接或我明确确认替换后再写入。'
+        )
     query = urlencode({"path": str(root), "prompt": prompt}, quote_via=quote)
     return {"state": "ready", "url": f"codex://threads/new?{query}"}
 
@@ -182,21 +138,10 @@ def task_operation(tool, params, panel, arguments):
     project_id = arguments.get("projectId")
     root, project = target_project(params, panel, project_id)
     source = ("codex-dashboard", "global") if project_id is not None else ("codex", panel["threadId"])
-    if tool is MUTATE:
-        return mutate_task(root, project, arguments["command"], arguments["request"], source=source)
-    task_id = arguments["taskId"]
-    if tool is HANDOFF:
-        return read_handoff(root, task_id, arguments["entryId"], project, exact=True)
-    if tool is SECTIONS:
-        return task_sections(root, task_id, project, exact=True)
-    if tool is HISTORY:
-        return read_history(root, task_id, arguments["source"], arguments["recordId"], project, exact=True)
-    with task_reader(root, task_id, project, exact=True) as (db, task):
-        if tool is CONTINUE:
-            return prepare_continue(root, task, project)
-        if tool is BLOCKERS:
-            return blocker_options(db, task, arguments["expectedRevision"], source)
-        return completion_options(db, task, arguments["expectedRevision"])
+    if tool is CONTINUE:
+        with task_reader(root, arguments["taskId"], project, exact=True) as (_, task):
+            return prepare_continue(root, task, project, arguments.get("locale", "zh-Hans"))
+    return run_task_tool(tool, root, project, arguments, source)
 
 
 def read_panel(params, panel):
@@ -224,13 +169,53 @@ def read_panel(params, panel):
         else:
             data = task_operation(tool, params, panel, arguments)
     except READ_ERRORS as error:
-        if ((tool is COMPLETION and getattr(error, "code", None) == "revision_conflict")
-                or (tool is BLOCKERS and not isinstance(error, PanelError))):
-            data = action_unavailable(error)
-        else:
-            data = unavailable(error)
-    return {"content": [], "structuredContent": data}
+        return adapter_result(error=error, tool=tool)
+    return adapter_result(data=data)
 
+
+def entry_language(params):
+    meta = params.get("_meta")
+    host = meta.get("locale") if isinstance(meta, dict) else None
+    preferred = next((value.strip() for value in (host, os.getenv("LC_ALL"), os.getenv("LC_MESSAGES"), os.getenv("LANG"))
+                      if isinstance(value, str) and value.strip()), "")
+    tag = preferred.split(".", 1)[0].lower().replace("_", "-")
+    return "zh-Hans" if tag in {"zh", "zh-cn", "zh-sg", "zh-hans"} or tag.startswith("zh-hans-") else "en"
+
+
+def dashboard_resource_uri():
+    # Codex retains the global app resource by URI across launches.
+    try:
+        assets = load_panel_assets(user_skill_path(), "dashboard")
+    except SharedResourceError:
+        return DASHBOARD_UNAVAILABLE_URI
+    return f"{DASHBOARD_URI}/{assets['config']['panelSha256']}"
+
+
+def resource_surface(uri):
+    if uri == RESOURCE_URI:
+        return "project"
+    if not isinstance(uri, str):
+        return None
+    base, _, digest = uri.rpartition("/")
+    if uri in (DASHBOARD_URI, DASHBOARD_UNAVAILABLE_URI) or (
+        base == DASHBOARD_URI and re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        return "dashboard"
+    return None
+
+
+def entry_tool(tool, language, dashboard_uri):
+    if tool is DASHBOARD:
+        metadata = tool["_meta"]
+        tool = {**tool, "_meta": {**metadata, "ui": {**metadata["ui"], "resourceUri": dashboard_uri}}}
+    titles = ENTRY_TITLES.get(tool["name"])
+    return {**tool, "title": titles[language]} if titles else tool
+
+
+def described_resource(uri, panel):
+    tool = TOOL if uri == RESOURCE_URI else DASHBOARD
+    language = panel.get("entryLanguage", entry_language({}))
+    return {"uri": uri, "name": ENTRY_TITLES[tool["name"]][language], "mimeType": MIME_TYPE}
 
 
 def respond(message, panel):
@@ -241,6 +226,7 @@ def respond(message, panel):
     method = message.get("method")
     params = message.get("params", {})
     if method == "initialize":
+        panel["entryLanguage"] = entry_language(params)
         requested = params.get("protocolVersion")
         protocol_version = requested if isinstance(requested, str) and requested in PROTOCOL_VERSIONS else "2025-11-25"
         result = {
@@ -251,23 +237,30 @@ def respond(message, panel):
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": list(TOOLS.values())}
+        language = panel.get("entryLanguage", entry_language({}))
+        dashboard_uri = dashboard_resource_uri()
+        result = {"tools": [entry_tool(tool, language, dashboard_uri) for tool in TOOLS.values()]}
     elif method == "resources/list":
-        result = {"resources": list(RESOURCES.values())}
+        uris = (RESOURCE_URI, dashboard_resource_uri())
+        result = {"resources": [described_resource(uri, panel) for uri in uris]}
     elif method == "resources/templates/list":
         result = {"resourceTemplates": []}
     elif method == "tools/call":
         result = read_panel(params, panel)
         if result is None:
             return {**response, "error": {"code": -32602, "message": "工具名称或参数无效。"}}
-    elif method == "resources/read" and isinstance(params.get("uri"), str) and params["uri"] in RESOURCES:
-        uri = params["uri"]
-        html = Path(__file__).with_name("panel.html").read_text(encoding="utf-8")
-        if uri == DASHBOARD_URI:
-            html = html.replace('data-surface="project"', 'data-surface="dashboard"', 1)
-        result = {"contents": [{**RESOURCES[uri], "text": html}]}
     elif method == "resources/read":
-        return {**response, "error": {"code": -32602, "message": "未知工具、参数或资源。"}}
+        uri = params.get("uri")
+        surface = resource_surface(uri)
+        if surface is None:
+            return {**response, "error": {"code": -32602, "message": "未知工具、参数或资源。"}}
+        try:
+            assets = load_panel_assets(user_skill_path(), surface)
+        except SharedResourceError as error:
+            return {**response, "error": {"code": -32000, "message": str(error), "data": error.response()}}
+        if surface == "dashboard" and uri not in (DASHBOARD_URI, f"{DASHBOARD_URI}/{assets['config']['panelSha256']}"):
+            return {**response, "error": {"code": -32000, "message": "页面版本已变化。请重新打开 Dashboard。"}}
+        result = {"contents": [{**described_resource(uri, panel), "text": assets["html"]}]}
     else:
         return {**response, "error": {"code": -32601, "message": "不支持此方法。"}}
     return {**response, "result": result}

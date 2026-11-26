@@ -1,6 +1,6 @@
 """验证 Codex GUI 独立安装、CLI／Skill 整套替换和恢复。"""
 
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 from hashlib import sha256
 from importlib.util import module_from_spec, spec_from_file_location
 from io import BytesIO, StringIO
@@ -18,6 +18,8 @@ from zipfile import ZipFile
 
 from build_local import REPO, build_full_package, build_release_assets
 from install import InstallError, install, find_codex
+from package_skill import build_package
+from panel_assets import load_panel_assets
 
 
 class BundleInstallTests(unittest.TestCase):
@@ -43,30 +45,49 @@ class BundleInstallTests(unittest.TestCase):
         self.gui_tag = release["version"]
         self.bundled_version = release["bundled_cli_version"]
         self.skill = self.home / ".agents/skills/worklog"
+        self.legacy = self.profile / "skills/worklog"
         self.manifest = self.skill / "scripts/release-version.json"
 
-    def existing_skill(self, version):
+    def existing_skill(self, version, path=None):
         from install import extract_skill
 
-        extract_skill(self.bundle / f"worklog-skill-{self.bundled_version}.zip", self.skill)
-        (self.skill / "old-local-note.txt").write_text("现有安装标记", encoding="utf-8")
+        path = path or self.skill
+        extract_skill(self.bundle / f"worklog-skill-{self.bundled_version}.zip", path)
+        (path / "old-local-note.txt").write_text("现有安装标记", encoding="utf-8")
+        manifest = path / "scripts/release-version.json"
         if version is None:
-            self.manifest.unlink()
+            manifest.unlink()
         else:
-            self.manifest.write_text(json.dumps({"version": version}), encoding="utf-8")
-        return self.fingerprint()
+            manifest.write_text(json.dumps({"version": version}), encoding="utf-8")
+        return self.fingerprint(path)
 
-    def fingerprint(self):
-        return {path.relative_to(self.skill): sha256(path.read_bytes()).hexdigest()
-                for path in self.skill.rglob("*") if path.is_file()}
+    def fingerprint(self, skill=None):
+        skill = skill or self.skill
+        return {path.relative_to(skill): sha256(path.read_bytes()).hexdigest()
+                for path in skill.rglob("*") if path.is_file()}
 
-    def call(self, choice=""):
+    def call(self, choice="", *, error=None, enable=None):
         output = StringIO()
-        with patch.dict(os.environ, self.environment), patch("builtins.input", return_value=choice) as confirmation:
-            with redirect_stdout(output), patch("install.install_plugin", return_value=self.profile / "plugin") as plugin:
+
+        def check_skill_at_enable(*args):
+            load_panel_assets(self.skill, "project")
+            self.assertFalse(self.legacy.exists())
+            return enable(*args) if enable else self.profile / "plugin"
+
+        with (
+            patch.dict(os.environ, self.environment),
+            patch("builtins.input", return_value=choice, side_effect=EOFError if choice is None else None) as confirmation,
+            redirect_stdout(output),
+            patch("install.install_plugin", side_effect=check_skill_at_enable) as plugin,
+        ):
+            with self.assertRaisesRegex(InstallError, error) if error else nullcontext():
                 install(self.bundle, self.profile, "codex")
-        self.assertTrue(plugin.called)
-        self.assertIn("新建本地聊天", output.getvalue())
+        if error and enable is None:
+            plugin.assert_not_called()
+        else:
+            plugin.assert_called_once()
+        if not error:
+            self.assertIn("新建本地聊天", output.getvalue())
         return output.getvalue(), confirmation.called
 
     def cli(self, command):
@@ -91,6 +112,16 @@ class BundleInstallTests(unittest.TestCase):
         with ZipFile(BytesIO(skill_package)) as skill:
             self.assertEqual(json.loads(skill.read("worklog/scripts/release-version.json"))["version"], "v5.6.7")
             self.assertIn("worklog-skill-v5.6.7.zip", skill.read("worklog/INSTALL.md").decode())
+
+    def test_full_package_contains_same_shared_assets_as_standalone_candidate(self):
+        with ZipFile(build_full_package(self.fixture, candidate_version="0.3.0", candidate_cli_version="v0.6.0")) as gui:
+            root = "worklog-codex-gui-v0.3.0/"
+            self.assertNotIn(root + "worklog-panel/panel.html", gui.namelist())
+            self.assertNotIn(root + "worklog-panel/gui-resource.json", gui.namelist())
+            inner_zip = BytesIO(gui.read(root + "worklog-skill-v0.6.0.zip"))
+        with ZipFile(inner_zip) as inner, ZipFile(build_package(self.fixture, candidate_version="v0.6.0")) as standalone:
+            for name in ("worklog/gui/panel.html", "worklog/gui-resource.json"):
+                self.assertEqual(sha256(inner.read(name)).digest(), sha256(standalone.read(name)).digest())
 
     def test_real_codex_installs_from_extracted_zip(self):
         try:
@@ -118,6 +149,69 @@ class BundleInstallTests(unittest.TestCase):
         self.assertNotIn("cwd", mcp)
         self.assertEqual(Path(mcp["args"][-1]), plugin_path / "server.py")
         self.assertEqual(mcp["env"]["WORKLOG_CODEX_SESSION_HOME"], str(self.profile))
+        self.assertFalse((plugin_path / "panel.html").exists())
+
+        def request(*messages):
+            payload = "".join(json.dumps({"jsonrpc": "2.0", "id": i, **message}) + "\n"
+                              for i, message in enumerate(messages, 1))
+            response = subprocess.run(
+                [mcp["command"], *mcp["args"]], input=payload, cwd=self.fixture,
+                env={**env, **mcp["env"]}, capture_output=True, check=True, text=True, timeout=15,
+            )
+            return [json.loads(line) for line in response.stdout.splitlines()]
+
+        panel, config_file = self.skill / "gui/panel.html", self.skill / "gui-resource.json"
+        tools_request = {"method": "tools/list"}
+        resources_request = {"method": "resources/list"}
+
+        def advertised_uris():
+            [tools, resources] = request(tools_request, resources_request)
+            uris = {entry["name"]: entry["_meta"]["ui"]["resourceUri"]
+                    for entry in tools["result"]["tools"] if entry["name"].startswith("open_worklog_")}
+            self.assertEqual(set(uris.values()), {entry["uri"] for entry in resources["result"]["resources"]})
+            return uris["open_worklog_codex_panel"], uris["open_worklog_dashboard"]
+
+        dashboard_base = "ui://worklog-codex-panel/dashboard"
+        panel_uri, prior_dashboard = advertised_uris()
+        self.assertEqual(panel_uri, "ui://worklog-codex-panel/panel")
+        self.assertEqual(prior_dashboard, f"{dashboard_base}/{sha256(panel.read_bytes()).hexdigest()}")
+        panel.write_bytes(panel.read_bytes() + b"\n<!-- isolated installed source marker -->\n")
+        data = panel.read_bytes()
+        config = json.loads(config_file.read_bytes())
+        config["panelSha256"] = sha256(data).hexdigest()
+        config_file.write_text(json.dumps(config), encoding="utf-8")
+        current_panel, current_dashboard = advertised_uris()
+        self.assertEqual(current_panel, panel_uri)
+        self.assertEqual(current_dashboard, f"{dashboard_base}/{config['panelSha256']}")
+        self.assertNotEqual(prior_dashboard, current_dashboard)
+        reads = [{"method": "resources/read", "params": {"uri": uri}}
+                 for uri in (panel_uri, current_dashboard, dashboard_base)]
+        for message, response, surface in zip(reads, request(*reads), ("project", "dashboard", "dashboard")):
+            uri = message["params"]["uri"]
+            [content] = response["result"]["contents"]
+            self.assertEqual(content["uri"], uri)
+            self.assertEqual(content["text"], data.decode().replace(
+                'data-surface="project"', f'data-surface="{surface}"', 1,
+            ))
+        outdated, = request({"method": "resources/read", "params": {"uri": prior_dashboard}})
+        self.assertEqual(outdated["error"]["code"], -32000)
+        self.assertIn("重新打开 Dashboard", outdated["error"]["message"])
+
+        self.legacy.parent.mkdir()
+        shutil.copytree(self.skill, self.legacy)
+        for update, code in (({"version": 2}, "shared_resources_incompatible"),
+                             ({"panelSha256": "0" * 64}, "shared_resources_unavailable"),
+                             (None, "shared_resources_unavailable")):
+            if update:
+                config_file.write_text(json.dumps({**config, **update}), encoding="utf-8")
+            else:
+                config_file.unlink()
+            self.assertEqual(advertised_uris(), (panel_uri, f"{dashboard_base}/unavailable"))
+            unavailable = {"method": "resources/read", "params": {"uri": f"{dashboard_base}/unavailable"}}
+            for response in request(*reads, unavailable):
+                error = response["error"]
+                self.assertEqual(error["data"]["code"], code)
+                self.assertIn("请更新 workLog Skill", error["message"])
 
     def test_real_codex_restores_plugin_state_after_install_failure(self):
         try:
@@ -163,6 +257,7 @@ class BundleInstallTests(unittest.TestCase):
         cases = (
             ("disabled", "version_mismatch"),
             ("enabled", "version_mismatch"),
+            ("legacy", "version_mismatch"),
             ("uninstalled", "version_mismatch"),
             ("never_installed", "version_mismatch"),
             ("never_installed", "add_command_failed"),
@@ -191,7 +286,9 @@ class BundleInstallTests(unittest.TestCase):
                         return {"installed": False, "enabled": None, "version": None}
                     return {key: entry[key] for key in ("installed", "enabled", "version")}
 
-                with patch.dict(os.environ, environment), redirect_stdout(StringIO()):
+                current_skill = Path(environment["HOME"]) / ".agents/skills/worklog"
+                legacy_skill = profile / "skills/worklog"
+                with patch.dict(os.environ, environment), patch("builtins.input", return_value="y"), redirect_stdout(StringIO()):
                     if initial != "never_installed":
                         old_installer.install(old_bundle, profile, codex)
                         if initial == "uninstalled":
@@ -201,13 +298,17 @@ class BundleInstallTests(unittest.TestCase):
                             config.write_text(content.replace(f'[plugins."{target}"]\nenabled = true',
                                                               f'[plugins."{target}"]\nenabled = false'),
                                               encoding="utf-8")
+                        elif initial == "legacy":
+                            legacy_skill.parent.mkdir()
+                            current_skill.rename(legacy_skill)
+                    previous_skills = tuple(self.fingerprint(path) for path in (current_skill, legacy_skill))
                     previous = plugin()
                     previous_market = marketplace()
                     manifest = profile / "worklog/codex/.agents/plugins/marketplace.json"
                     previous_manifest = manifest.read_bytes() if manifest.exists() else None
-                    installed = initial in {"disabled", "enabled"}
+                    installed = initial in {"disabled", "enabled", "legacy"}
                     self.assertEqual(state(previous), {
-                        "installed": installed, "enabled": (initial == "enabled") if installed else None,
+                        "installed": installed, "enabled": (initial != "disabled") if installed else None,
                         "version": old_version if installed else None,
                     })
                     self.assertEqual(previous_market is None, initial == "never_installed")
@@ -216,6 +317,8 @@ class BundleInstallTests(unittest.TestCase):
                     def inject(args, cwd, env=None):
                         response = run(args, cwd, env)
                         if args[:4] == [codex, "plugin", "add", target] and not observed_candidate:
+                            load_panel_assets(current_skill, "project")
+                            self.assertFalse(legacy_skill.exists())
                             installed_report = json.loads(response)
                             self.assertEqual(installed_report["version"], candidate_version)
                             cache = Path(installed_report["installedPath"])
@@ -243,12 +346,14 @@ class BundleInstallTests(unittest.TestCase):
                     self.assertEqual(actual, previous)
                     self.assertEqual(marketplace(), previous_market)
                     self.assertEqual(manifest.read_bytes() if manifest.exists() else None, previous_manifest)
+                    self.assertEqual(tuple(self.fingerprint(path) for path in (current_skill, legacy_skill)), previous_skills)
                     actual_config = config.read_text(encoding="utf-8")
                     self.assertIn(unrelated_setting, actual_config)
                     self.assertIn("# independent edit during installation", actual_config)
                     report["cases"][f"{initial}-{fault}"] = {
                         "before": state(previous), "during": observed_candidate[0], "after": state(actual),
                         "marketplace_restored": True, "original_manifest_preserved": True,
+                        "original_skill_paths_preserved": True,
                         "unrelated_config_preserved": True, "installer_message": str(caught.exception),
                     }
 
@@ -408,6 +513,96 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
         self.call("yes")
         self.assertEqual(json.loads(self.cli("release-version"))["result"]["release_version"], self.bundled_version)
 
+    def test_migrates_legacy_only_after_confirmation_and_backs_it_up_outside_skill_paths(self):
+        before = self.existing_skill("v0.3.0", self.legacy)
+        output, prompted = self.call("y")
+        self.assertTrue(prompted)
+        self.assertIn(f"{self.skill}，版本 尚未安装", output)
+        self.assertIn(f"{self.legacy}，版本 v0.3.0", output)
+        self.assert_installed_release(output)
+        [backup] = (self.profile / "worklog-skill-backups").glob("*/worklog")
+        self.assertEqual(self.fingerprint(backup), before)
+        self.assertIn(str(backup), output)
+
+    def test_migration_keeps_compatible_new_path_when_both_are_installed(self):
+        current = self.existing_skill("v9.0.0")
+        previous = self.existing_skill("v0.3.0", self.legacy)
+        output, prompted = self.call("y")
+        self.assertTrue(prompted)
+        self.assertIn(f"{self.skill}，版本 v9.0.0", output)
+        self.assertIn(f"{self.legacy}，版本 v0.3.0", output)
+        self.assertEqual(self.fingerprint(), current)
+        [backup] = (self.profile / "worklog-skill-backups").glob("*/worklog")
+        self.assertEqual(self.fingerprint(backup), previous)
+
+    def test_declined_migration_and_eof_keep_both_installations(self):
+        current = self.existing_skill(self.bundled_version)
+        previous = self.existing_skill("v0.3.0", self.legacy)
+        for choice in ("n", None):
+            with self.subTest(choice=choice):
+                _, prompted = self.call(choice, error="已取消迁移")
+                self.assertTrue(prompted)
+                self.assertEqual(self.fingerprint(), current)
+                self.assertEqual(self.fingerprint(self.legacy), previous)
+                self.assertFalse((self.profile / "worklog-skill-backups").exists())
+
+    def test_incompatible_or_missing_resources_prevent_gui_enable_until_skill_is_updated(self):
+        config = self.skill / "gui-resource.json"
+        for broken in (None, '{"version":2}'):
+            with self.subTest(broken=broken):
+                self.existing_skill("v9.0.0")
+                if broken is None:
+                    config.unlink()
+                else:
+                    config.write_text(broken, encoding="utf-8")
+                original = self.fingerprint()
+                self.call(error="请更新 workLog Skill")
+                self.assertEqual(self.fingerprint(), original)
+                output, _ = self.call("y")
+                self.assert_installed_release(output)
+
+    def test_failure_at_final_resource_check_restores_old_install_before_gui_enable(self):
+        previous = self.existing_skill("v0.3.0", self.legacy)
+        rename = Path.rename
+
+        def damage_installed_panel(path, destination):
+            moved = rename(path, destination)
+            if path.name == "candidate" and destination == self.skill:
+                (destination / "gui/panel.html").unlink()
+            return moved
+
+        with patch.object(Path, "rename", damage_installed_panel):
+            self.call("y", error="请更新 workLog Skill")
+        self.assertFalse(self.skill.exists())
+        self.assertEqual(self.fingerprint(self.legacy), previous)
+
+    def test_failure_to_move_legacy_backup_restores_both_installations(self):
+        current = self.existing_skill("v0.3.0")
+        previous = self.existing_skill("v0.4.0", self.legacy)
+        rename = Path.rename
+
+        def fail_backup(path, destination):
+            if path == self.legacy:
+                raise OSError("模拟移动旧安装失败")
+            return rename(path, destination)
+
+        with patch.object(Path, "rename", fail_backup):
+            self.call("y", error="备份旧路径 CLI／Skill.*已恢复原有 CLI／Skill")
+        self.assertEqual(self.fingerprint(), current)
+        self.assertEqual(self.fingerprint(self.legacy), previous)
+
+    def test_gui_enable_failure_restores_new_and_old_skill_installations(self):
+        current = self.existing_skill("v0.3.0")
+        previous = self.existing_skill("v0.4.0", self.legacy)
+
+        def fail_enable(*_):
+            self.assertEqual(json.loads(self.cli("release-version"))["result"]["release_version"], self.bundled_version)
+            raise InstallError("模拟 GUI 启用失败")
+
+        self.call("y", error="已恢复原有 CLI／Skill.*模拟 GUI 启用失败", enable=fail_enable)
+        self.assertEqual(self.fingerprint(), current)
+        self.assertEqual(self.fingerprint(self.legacy), previous)
+
     def test_failure_during_rename_restores_previous_cli_and_skill(self):
         before = self.existing_skill("v0.3.0")
         rename = Path.rename
@@ -437,9 +632,35 @@ with Path(os.environ["WORKLOG_TEST_DOWNLOADS"]).open("a", encoding="utf-8") as l
         self.assertEqual(self.fingerprint(), before)
         self.assertFalse(backup.exists())
 
+    def test_recovers_old_path_interrupted_install_before_migration_prompt(self):
+        before = self.existing_skill("v0.3.0", self.legacy)
+        backup = self.legacy.parent / ".worklog-install-previous"
+        self.legacy.rename(backup)
+        self.existing_skill(self.bundled_version, self.legacy)
+        output, _ = self.call("n", error="已取消迁移")
+        self.assertIn("已恢复上次安装中断前的旧路径", output)
+        self.assertEqual(self.fingerprint(self.legacy), before)
+        self.assertFalse(self.skill.exists())
+
+    def test_interrupt_after_legacy_backup_move_restores_both_originals(self):
+        current = self.existing_skill("v0.3.0")
+        legacy = self.existing_skill("v0.4.0", self.legacy)
+        rename = Path.rename
+
+        def interrupt_after_move(path, destination):
+            moved = rename(path, destination)
+            if path == self.legacy:
+                raise KeyboardInterrupt
+            return moved
+
+        with patch.object(Path, "rename", interrupt_after_move):
+            self.call("y", error="备份旧路径 CLI／Skill.*已恢复原有 CLI／Skill")
+        self.assertEqual(self.fingerprint(), current)
+        self.assertEqual(self.fingerprint(self.legacy), legacy)
+
     def test_incomplete_bundle_stops_before_mutating_install(self):
         before = self.existing_skill("v0.3.0")
-        (self.bundle / "worklog-panel/panel.html").unlink()
+        (self.bundle / f"worklog-skill-{self.bundled_version}.zip").unlink()
         with self.assertRaisesRegex(InstallError, "完整包缺少文件"):
             self.call("y")
         self.assertFalse(self.profile.exists())

@@ -1,3 +1,4 @@
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -47,15 +48,68 @@ class SkillPackageTest(unittest.TestCase):
             "worklog/scripts/worklog_projects.py": "worklog_projects.py",
             "worklog/scripts/worklog_release.py": "worklog_release.py",
             "worklog/scripts/release-version.json": "release-version.json",
+            "worklog/scripts/panel_assets.py": "gui/shared/panel_assets.py",
+            "worklog/scripts/panel_bridge.py": "gui/shared/panel_bridge.py",
+            "worklog/scripts/panel_tools.py": "gui/shared/panel_tools.py",
+            "worklog/scripts/project_panel.py": "gui/shared/project_panel.py",
+            "worklog/scripts/task_actions.py": "gui/shared/task_actions.py",
+            "worklog/gui/panel.html": "gui/shared/panel.html",
         }
         with ZipFile(first) as archive:
             self.assertIsNone(archive.testzip())
-            self.assertCountEqual(archive.namelist(), expected)
+            self.assertCountEqual(archive.namelist(), [*expected, "worklog/gui-resource.json"])
             for member, source in expected.items():
                 self.assertEqual(archive.read(member), (ROOT / source).read_bytes())
+            self.assertEqual(json.loads(archive.read("worklog/gui-resource.json")), {
+                "version": 1, "panelSha256": sha256(archive.read("worklog/gui/panel.html")).hexdigest(),
+            })
             instructions = archive.read("worklog/INSTALL.md").decode()
             self.assertIn(f'SKILL_ZIP="/absolute/path/to/{first.name}"', instructions)
             self.assertIn(f"当前发布版本为 `{RELEASE_VERSION}`", instructions)
+
+    def test_shared_resource_adapter_reads_and_validates_assets_from_installed_skill(self):
+        with ZipFile(self.build(self.directory)) as archive:
+            archive.extractall(self.directory)
+        skill = self.directory / "worklog"
+        config_path = skill / "gui-resource.json"
+        config = json.loads(config_path.read_bytes())
+        panel_path = skill / "gui/panel.html"
+        source = panel_path.read_bytes()
+
+        def read(surface):
+            call = subprocess.run(
+                [sys.executable, "-B", str(skill / "scripts/panel_assets.py"),
+                 "--skill", str(skill), "--surface", surface],
+                cwd=self.directory, capture_output=True, check=False, timeout=15,
+            )
+            return call.returncode, json.loads(call.stdout)
+
+        for surface in ("project", "dashboard"):
+            self.assertEqual(read(surface), (0, {"config": config, "html": source.decode("utf-8").replace(
+                'data-surface="project"', f'data-surface="{surface}"', 1,
+            )}))
+
+        def assert_error(code):
+            status, error = read("dashboard")
+            self.assertNotEqual(status, 0)
+            self.assertEqual(error["code"], code)
+            self.assertIn("请更新 workLog Skill", error["message"])
+
+        config_path.write_text(json.dumps({**config, "version": 2}), encoding="utf-8")
+        assert_error("shared_resources_incompatible")
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        panel_path.write_bytes(source + b"\n")
+        assert_error("shared_resources_unavailable")
+        for data in (
+            b"\xff",
+            source.replace(b'data-surface="project"', b'data-surface="unknown"', 1),
+            b"""<!doctype html><html title=' data-surface="project" '><body></body></html>""",
+        ):
+            panel_path.write_bytes(data)
+            config_path.write_text(json.dumps({**config, "panelSha256": sha256(data).hexdigest()}), encoding="utf-8")
+            assert_error("shared_resources_unavailable")
+        config_path.unlink()
+        assert_error("shared_resources_unavailable")
 
     def test_cli_works_after_install_from_another_directory(self):
         installed = self.directory / "caller/.agents/skills"

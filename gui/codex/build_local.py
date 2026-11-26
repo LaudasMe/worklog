@@ -18,8 +18,8 @@ sys.path.insert(0, str(REPO / "scripts"))
 from package_skill import build_package
 
 PLUGIN_FILES = (
-    ".codex-plugin/plugin.json", "codex_skill_version.py", "panel.html",
-    "project_panel.py", "release-version.json", "server.py", "task_actions.py",
+    ".codex-plugin/plugin.json", "codex_skill_version.py",
+    "release-version.json", "server.py",
 )
 RUNTIME_FILES = (
     "worklog_context.py", "worklog_projects.py", "worklog_release.py",
@@ -60,6 +60,10 @@ def build_full_package(output_dir, *, candidate_version=None, candidate_cli_vers
         }
         sources.update({f"worklog-panel/{name}": plugin / name for name in PLUGIN_FILES})
         sources.update({f"worklog-panel/runtime/{name}": REPO / name for name in RUNTIME_FILES})
+        sources.update({
+            f"worklog-panel/runtime/{name}": REPO / "gui/shared" / name
+            for name in ("panel_assets.py", "panel_tools.py", "project_panel.py", "task_actions.py")
+        })
         payload = {name: source.read_bytes() for name, source in sources.items()}
         if candidate_version is not None:
             for name, manifest in (

@@ -6,9 +6,6 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent / "runtime"))
 
 from worklog_projects import read_registry, registry_path
 from worklog_store import (
@@ -101,6 +98,7 @@ def task_card(db, task, revision):
         "status": task["display_status"],
         "lifecycle": task["status"],
         "blocked": task["blocked"],
+        "priority": task["priority"],
         "revision": revision,
         "updatedAt": task["updated_at"],
         "progress": {
@@ -171,6 +169,24 @@ def registered_target(root, expected_project):
     if item is None or item["project_id"] != expected_project[0]:
         raise PanelError("项目登记已变化。请刷新 Dashboard 后再试。", "project_mismatch")
 
+
+
+def dashboard_target(project_id):
+    if project_id is None:
+        raise PanelError("请先在 Dashboard 选择项目。", "project_mismatch")
+    candidates = []
+    for path, item in read_registry(registry_path()).items():
+        if item["project_id"] != project_id:
+            continue
+        root = Path(path)
+        try:
+            with open_project(root, project_id) as (_, project):
+                candidates.append((root, project_key(project)))
+        except READ_ERRORS:
+            continue
+    if len(candidates) != 1:
+        raise PanelError("此项目当前不可用。请先刷新 Dashboard。", "project_mismatch")
+    return candidates[0]
 
 
 def project_key(project):

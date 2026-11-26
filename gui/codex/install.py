@@ -10,10 +10,11 @@ import os
 from pathlib import Path, PurePosixPath
 import select
 import shutil
+import signal
 import stat
 import subprocess
 import sys
-from tempfile import mkdtemp, NamedTemporaryFile
+from tempfile import mkdtemp, NamedTemporaryFile, TemporaryDirectory
 from time import monotonic
 from zipfile import BadZipFile, ZipFile
 
@@ -100,11 +101,10 @@ def locked(parent, name):
         yield
 
 
-def recover_skill(skill, previous, staging):
+def recover_skill(skill, previous, displaced):
     """仅在成功切换后才移走备份。中断的切换可在重试时恢复。"""
     if not exists(previous):
         return False
-    displaced = staging / "interrupted"
     if exists(skill):
         skill.rename(displaced)
     try:
@@ -116,46 +116,70 @@ def recover_skill(skill, previous, staging):
     return True
 
 
-def activate_skill(skill, candidate, previous, staging, version):
-    step = "备份原有 CLI／Skill"
-    original_moved = candidate_moved = False
+@contextmanager
+def activate_skill(skill, candidate, previous, staging, version, legacy, load_panel_assets):
+    step = "验证共享资源"
+    original_present = candidate is not None and exists(skill)
+    legacy_backup = legacy_pending_backup(legacy) if legacy is not None else None
     try:
-        if exists(skill):
-            skill.rename(previous)
-            original_moved = True
-        step = "启用新 CLI／Skill"
-        candidate.rename(skill)
-        candidate_moved = True
-        step = "验证新 CLI／Skill"
-        validate_skill(skill, version)
-        if original_moved:
-            step = "完成切换"
-            previous.rename(staging / "retired")
+        if candidate is not None:
+            step = "备份原有 CLI／Skill"
+            if original_present:
+                skill.rename(previous)
+            step = "启用新 CLI／Skill"
+            candidate.rename(skill)
+            step = "验证新 CLI／Skill"
+            validate_skill(skill, version)
+        load_panel_assets(skill, "project")
+        if legacy is not None:
+            step = "备份旧路径 CLI／Skill"
+            legacy_backup.parent.mkdir(parents=True, exist_ok=True)
+            legacy.rename(legacy_backup)
+        step = "启用 Codex GUI"
+        yield legacy_backup
     except (Exception, KeyboardInterrupt) as error:
+        recovery_errors = []
+        legacy_moved = legacy_backup is not None and exists(legacy_backup)
+        original_moved = exists(previous)
+        if legacy_moved:
+            try:
+                legacy_backup.rename(legacy)
+            except OSError as recovery_error:
+                recovery_errors.append(f"旧路径的备份位于 {legacy_backup}。{recovery_error}")
         try:
             if original_moved:
-                recover_skill(skill, previous, staging)
-            elif candidate_moved:
-                skill.rename(staging / "interrupted")
+                recover_skill(skill, previous, staging / "failed")
+            elif candidate is not None and not original_present and not exists(candidate) and exists(skill):
+                skill.rename(staging / "failed")
         except OSError as recovery_error:
-            raise InstallError(
-                f"CLI／Skill 安装失败（{step}）并且恢复失败。原备份在 {previous}。"
-                f" 故障 {error}。恢复错误 {recovery_error}"
-            ) from error
-        recovery = "已恢复原有 CLI／Skill。" if original_moved else "已保留安装前的状态。"
+            if original_moved:
+                recovery_errors.append(f"新路径的原备份位于 {previous}。{recovery_error}")
+            else:
+                recovery_errors.append(f"无法移除新安装的 CLI／Skill {skill}。{recovery_error}")
+        if recovery_errors:
+            raise InstallError(f"CLI／Skill 安装失败（{step}）并且恢复失败。{error}。{' '.join(recovery_errors)}") from error
+        recovery = "已恢复原有 CLI／Skill。" if original_moved or legacy_moved else "已保留安装前的 Skill 状态。"
         raise InstallError(f"CLI／Skill 安装失败（{step}）。{recovery} {error}") from error
 
 
-def confirm_replacement(current, bundled, parse_version, *, same_version_changed=False):
-    if current and parse_version(current) >= parse_version(bundled) and not same_version_changed:
+def legacy_pending_backup(legacy):
+    return legacy.parent.parent / "worklog-skill-backups" / ".worklog-install-pending" / legacy.name
+
+
+def confirm_replacement(current, bundled, parse_version, *, same_version_changed=False, incompatible=False):
+    if current and parse_version(current) >= parse_version(bundled) and not (same_version_changed or incompatible):
         print(f"现有 CLI／Skill {current}，随包版本 {bundled}。沿用现有安装。", flush=True)
         return False
     existing = f"现有 CLI／Skill {current}" if current else "现有版本无法识别"
     print(f"{existing}，随包版本 {bundled}。", flush=True)
     if same_version_changed:
         print("随包与现有的同版本 CLI／Skill 文件有差异。", flush=True)
+    return confirm("是否整套替换现有 CLI／Skill？[y/N] ")
+
+
+def confirm(prompt):
     try:
-        return input("是否整套替换现有 CLI／Skill？[y/N] ").strip().lower() in {"y", "yes"}
+        return input(prompt).strip().lower() in {"y", "yes"}
     except EOFError:
         return False
 
@@ -330,20 +354,11 @@ def install_plugin(payload, archive_id, version, codex_home, codex):
     return plugin_root
 
 
-def user_skill_path(codex_home):
-    current = Path.home() / ".agents/skills/worklog"
-    former = codex_home / "skills/worklog"
-    current_present = exists(current) or exists(current.parent / ".worklog-install-previous")
-    former_present = exists(former) or exists(former.parent / ".worklog-install-previous")
-    if current_present and former_present and current.parent.resolve() != former.parent.resolve():
-        return current, former
-    return (former if former_present else current), None
-
-
 def install(bundle, codex_home, codex):
     payload, archive_id = verified_payload(bundle)
     plugin_manifest = json.loads(payload[f"worklog-panel/{VERSION_FILE}"])
     sys.path.insert(0, str(bundle / "worklog-panel/runtime"))
+    from panel_assets import SharedResourceError, load_panel_assets, user_skill_path
     from worklog_release import parse_version, read_release_version
 
     gui = plugin_manifest["version"]
@@ -352,33 +367,71 @@ def install(bundle, codex_home, codex):
         raise InstallError("完整包的版本清单无效。")
     with ExitStack() as locks:
         locks.enter_context(locked(codex_home, ".worklog-codex-install.lock"))
-        skill, alternate = user_skill_path(codex_home)
+        skill, former = user_skill_path(), codex_home / "skills/worklog"
         locks.enter_context(locked(skill.parent, ".worklog-install.lock"))
         previous = skill.parent / ".worklog-install-previous"
         staging = Path(mkdtemp(prefix=".worklog-install-", dir=skill.parent))
         try:
-            if recover_skill(skill, previous, staging):
+            if recover_skill(skill, previous, staging / "interrupted"):
                 print("已恢复上次安装中断前的 CLI／Skill。", flush=True)
+            legacy = None
+            if former.parent.is_dir() and former.parent.resolve() != skill.parent.resolve():
+                locks.enter_context(locked(former.parent, ".worklog-install.lock"))
+                pending = legacy_pending_backup(former)
+                if exists(pending):
+                    if exists(former):
+                        raise InstallError(f"旧路径和上次安装的待恢复备份同时存在。备份位于 {pending}。")
+                    pending.rename(former)
+                    print("已恢复上次安装中断前的旧路径 CLI／Skill。", flush=True)
+                legacy_previous = former.parent / ".worklog-install-previous"
+                if exists(legacy_previous):
+                    with TemporaryDirectory(prefix=".worklog-recovery-", dir=former.parent) as legacy_staging:
+                        recover_skill(former, legacy_previous, Path(legacy_staging) / "interrupted")
+                    print("已恢复上次安装中断前的旧路径 CLI／Skill。", flush=True)
+                if exists(former):
+                    legacy = former
+                    for path in (skill, legacy):
+                        version = read_release_version(path / SKILL_VERSION_FILE) or (
+                            "无法识别" if exists(path) else "尚未安装"
+                        )
+                        print(f"CLI／Skill 目录 {path}，版本 {version}。", flush=True)
+                    if not confirm("是否使用新路径，并将旧路径的 CLI／Skill 移出加载目录？[y/N] "):
+                        raise InstallError("已取消迁移。保留原有 CLI／Skill 和 Codex GUI。")
             candidate = staging / "candidate"
             archive = staging / "skill.zip"
             archive.write_bytes(payload[f"worklog-skill-{bundled}.zip"])
             extract_skill(archive, candidate)
             validate_skill(candidate, bundled)
-            if alternate is None:
+            try:
+                load_panel_assets(candidate, "project")
+            except SharedResourceError as error:
+                raise InstallError(str(error)) from error
+            replace = not exists(skill)
+            if not replace:
+                resource_error = None
+                try:
+                    load_panel_assets(skill, "project")
+                except SharedResourceError as error:
+                    resource_error = error
+                    print(str(error), flush=True)
                 current = read_release_version(skill / SKILL_VERSION_FILE)
-                replace = not exists(skill) or confirm_replacement(
+                replace = confirm_replacement(
                     current, bundled, parse_version,
                     same_version_changed=current == bundled and not matches_skill(skill, candidate),
+                    incompatible=resource_error is not None,
                 )
-            else:
-                print(f"发现两套用户级 CLI／Skill，保留 {skill} 和 {alternate}。随包版本 {bundled}。", flush=True)
-                replace = False
-            plugin_root = install_plugin(payload, archive_id, gui, codex_home, codex)
+                if resource_error is not None and not replace:
+                    raise InstallError(str(resource_error)) from resource_error
+            with activate_skill(skill, candidate if replace else None, previous, staging, bundled,
+                                legacy, load_panel_assets) as legacy_backup:
+                plugin_root = install_plugin(payload, archive_id, gui, codex_home, codex)
+            if exists(previous):
+                previous.rename(staging / "retired")
+            if legacy_backup is not None:
+                completed = Path(mkdtemp(prefix="worklog-", dir=legacy_backup.parent.parent))
+                legacy_backup = legacy_backup.rename(completed / legacy_backup.name)
+                print(f"旧路径的 CLI／Skill 已备份至 {legacy_backup}。")
             if replace:
-                try:
-                    activate_skill(skill, candidate, previous, staging, bundled)
-                except InstallError as error:
-                    raise InstallError(f"侧栏已安装。{error}") from error
                 print(f"侧栏 {gui} 与 CLI／Skill {bundled} 已安装。")
             else:
                 print("侧栏已安装，CLI／Skill 沿用现有安装。")
@@ -407,11 +460,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex", help="Codex CLI 可执行文件路径")
     args = parser.parse_args()
+    def interrupt(_signum, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupt)
     try:
         codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser().resolve()
         install(Path(__file__).resolve().parent, codex_home, find_codex(args.codex))
     except (InstallError, OSError, BadZipFile, KeyError, ValueError) as error:
         print(f"安装失败。{error}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("安装已中断。", file=sys.stderr)
         return 1
     return 0
 

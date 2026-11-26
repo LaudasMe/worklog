@@ -15,6 +15,7 @@ const task = (project, number, status) => ({
   id: project + number, number: "T" + String(number).padStart(3, "0"),
   title: project + " task " + number, status, lifecycle: status, revision: 1,
   updatedAt: "2026-11-25T05:00:00Z",
+  priority: ["p0","p1","p2","p3",null][(number - 1) % 5],
 });
 const series = (id, first, count, status) => Array.from({ length: count }, (_, i) => task(id, first + i, status));
 const project = (id, projectName, tasks) => ({
@@ -38,13 +39,15 @@ writeFileSync(join(directory, "host.html"), [
   '<!doctype html><meta charset="utf-8"><style>body{margin:0}iframe{display:block;width:100vw;height:100vh;border:0}</style>',
   '<iframe id="frame"></iframe><script>',
   'const dashboard = location.search.includes("dashboard");',
+  'const language = new URLSearchParams(location.search);',
+  'const hostContext = {theme: dashboard ? "light" : "dark", locale: language.get("host") ?? (language.has("system") ? undefined : "zh-CN"), systemLocale: language.get("system")};',
   'const projects = ' + JSON.stringify(fixture) + ';',
   'const frame = document.getElementById("frame");',
   'const view = () => dashboard ? {state: "ready", projects} : projects[0];',
   'const post = (message) => frame.contentWindow.postMessage({jsonrpc: "2.0", ...message}, "*");',
   'window.addEventListener("message", ({data: message}) => {',
   '  if (message.method === "ui/initialize") {',
-  '    post({id: message.id, result: {hostContext: {theme: dashboard ? "light" : "dark"}}});',
+  '    post({id: message.id, result: {hostContext}});',
   '  } else if (message.method === "ui/notifications/initialized") {',
   '    post({method: "ui/notifications/tool-result", params: {structuredContent: view()}});',
   '  } else if (message.method === "tools/call") {',
@@ -57,6 +60,15 @@ writeFileSync(join(directory, "host.html"), [
   '      const task = {id: "new", number: "T999", title: args.request.title, status: "TODO", lifecycle: "TODO", revision: 1};',
   '      project.tasks.push(task);',
   '      result = {state: "ready", task};',
+  '    } else if (name === "mutate_worklog_task" && args.command === "task-set-priority") {',
+  '      const project = dashboard ? projects.find((item) => item.id === args.projectId) : projects[0];',
+  '      const task = project.tasks.find((item) => item.id === args.request.task_id);',
+  '      if (args.request.project_id !== project.id || args.request.data_generation !== project.generation || task.revision !== args.request.expected_revision) throw new Error("Wrong write guards");',
+  '      task.priority = args.request.priority;',
+  '      task.revision += 1;',
+  '      result = {state: "ready", task};',
+  '    } else if (name === "read_worklog_task_sections") {',
+  '      result = {state:"ready", todos:{open:[],processed:[]},history:[],sessions:[]};',
   '    } else throw new Error("Unexpected tool: " + name);',
   '    post({id: message.id, result: {structuredContent: result}});',
   '  }',
@@ -100,7 +112,7 @@ const browserExited = new Promise((resolve) => {
     resolve();
   });
 });
-const timeout = setTimeout(() => browser.kill(), 30000);
+const timeout = setTimeout(() => browser.kill(), 45000);
 const send = (method, params, sessionId) => new Promise((resolve, reject) => {
   const id = ++sequence;
   pending.set(id, { resolve, reject });
@@ -137,6 +149,7 @@ try {
   const selectProject = (value) => inside("{ const select = document.getElementById('project-filter'); select.value = " +
     JSON.stringify(value) + "; select.dispatchEvent(new Event('change', {bubbles:true})); }");
   const filter = (key) => click('.filter[data-status="' + key + '"]');
+  const priorityFilter = (key) => click('#priority-filters .filter[data-priority="' + key + '"]');
   const pageState = async (page, pages, range, total) => {
     assert.deepEqual(await Promise.all([
       text("#page-number"), text("#page-count"), text("#page-range"), text("#page-task-count"),
@@ -175,6 +188,74 @@ try {
       writeFileSync(join(screenshotDir, surface + "-pagination.png"), Buffer.from(data, "base64"));
     }
   };
+  const keypress = async (key, code, keyCode, character) => {
+    const event = { key, code, windowsVirtualKeyCode: keyCode };
+    await call("Input.dispatchKeyEvent", { ...event, type: "keyDown", ...(character ? {text: character} : {}) });
+    await call("Input.dispatchKeyEvent", { ...event, type: "keyUp" });
+  };
+  const verifyPriority = async () => {
+    const priority = '.task[data-key="A/A1"] .task-priority';
+    const details = '.task[data-key="A/A1"] .priority-value';
+    assert.equal(await text(details), "P0 最高");
+    assert.deepEqual(await inside(
+      "[...new Set([...document.querySelectorAll('.task-priority .priority-mark')].map(mark => mark.dataset.priority))].sort()"
+    ), ["p0", "p1", "p2", "p3", "unset"]);
+    assert.equal(await inside(query(priority) + ".getAttribute('aria-label')"), "T001 优先级：P0 最高");
+    assert.equal(await inside(`(() => {
+      const control = ${query(priority)};
+      const row = control.closest(".task");
+      const number = row.querySelector(".task-number").getBoundingClientRect();
+      const badge = control.getBoundingClientRect();
+      return number.right < badge.left && badge.right < window.innerWidth && badge.width > 20;
+    })()`), true);
+    const checkPriorityCenter = async (state) => {
+      const offset = await inside(`(() => {
+        const button = ${query(priority)};
+        const box = button.getBoundingClientRect();
+        const mark = button.querySelector(".priority-mark").getBoundingClientRect();
+        return [(mark.left + mark.right - box.left - box.right) / 2,
+          (mark.top + mark.bottom - box.top - box.bottom) / 2];
+      })()`);
+      assert.ok(offset.every((shift) => Math.abs(shift) < 0.5),
+        `priority mark is centered ${state}: ${offset}`);
+    };
+    const moveTo = async (selector) => {
+      const position = await inside(`(() => {
+        const button = ${query(selector)};
+        button.scrollIntoView({block: "nearest"});
+        const box = button.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      })()`);
+      await call("Input.dispatchMouseEvent", {type: "mouseMoved", ...position});
+      await wait(() => inside(query(selector) + ".matches(':hover')"), selector + " hover");
+      return position;
+    };
+    const press = async (position) => {
+      for (const type of ["mousePressed", "mouseReleased"]) {
+        await call("Input.dispatchMouseEvent", {type, ...position, button: "left", clickCount: 1});
+      }
+    };
+    const pointer = await moveTo(priority);
+    await checkPriorityCenter("on hover");
+    await press(pointer);
+    assert.equal(await inside(query(priority) + ".getAttribute('aria-expanded')"), "true");
+    assert.equal(await inside("document.querySelectorAll('#status-menu [role=menuitemradio]').length"), 5);
+    assert.equal(await inside("document.activeElement.dataset.priority"), "p0");
+    assert.equal(await inside("document.activeElement.querySelector('svg:last-child use')?.getAttribute('href')"), "#icon-check");
+    await keypress("ArrowDown", "ArrowDown", 40);
+    await keypress("Enter", "Enter", 13, "\r");
+    await wait(async () => (await text(details)) === "P1 高", "priority saved");
+    assert.equal(await inside("document.activeElement.className"), "task-priority");
+    await press(await moveTo(priority));
+    const unsetPoint = await moveTo('#status-menu [data-priority="unset"]');
+    assert.equal(await inside(query(priority) + ".matches(':hover')"), false);
+    await checkPriorityCenter("with the menu open");
+    await press(unsetPoint);
+    await wait(async () => (await text(details)) === "未设置", "priority cleared");
+    assert.equal(await inside(query(priority) + ".getAttribute('aria-label')"), "T001 优先级：未设置");
+    await moveTo(priority);
+    await checkPriorityCenter("on hover with no priority set");
+  };
   const checkFullOrder = async (expected, size) => {
     const seen = [];
     for (let start = 0; start < expected.length; start += size) {
@@ -200,9 +281,11 @@ try {
   };
 
   await load("dashboard", 1080, 720);
+  assert.equal(await inside("document.documentElement.dataset.theme"), "light");
   await pageState(1, 4, "1–20", 63);
   assert.deepEqual(await groupLabels(), [["甲项目", "42"]]);
   await verifyLayout("dashboard");
+  await verifyPriority();
   const dashboardOrder = [projectA, projectB].flatMap(({ id, tasks }) =>
     tasks.filter(({ status }) => status !== "DONE").map((item) => id + "/" + item.id));
   await checkFullOrder(dashboardOrder, 20);
@@ -243,9 +326,11 @@ try {
   await pageState(2, 2, "21–25", 25);
 
   await load("project", 320, 610);
+  assert.equal(await inside("document.documentElement.dataset.theme"), "dark");
   await pageState(1, 4, "1–12", 45);
   assert.deepEqual(await groupLabels(), [["进行中", "25 项"]]);
   await verifyLayout("sidebar");
+  await verifyPriority();
   const sidebarOrder = ["IN_PROGRESS", "TODO", "DONE"].flatMap((status) =>
     projectA.tasks.filter((item) => item.status === status).map((item) => "A/" + item.id));
   await checkFullOrder(sidebarOrder, 12);
@@ -277,8 +362,64 @@ try {
   await refresh();
   assert.equal(await inside("document.querySelector('#pagination').hidden"), true);
   assert.equal(await text("#empty-tasks-message"), "此项目还没有任务。");
+
+  for (const dashboard of [true, false]) {
+    await load(dashboard ? "dashboard" : "project", dashboard ? 1080 : 320, 650);
+    await filter("IN_PROGRESS");
+    await click("#next-page");
+    await priorityFilter("p1");
+    let count = dashboard ? 8 : 5;
+    await pageState(1, 1, "1–" + count, count);
+    assert.equal(await text('#priority-filters [data-priority="p1"] .count'), String(count));
+    assert.equal(await text('#priority-filters [data-priority="all"] .count'), dashboard ? "37" : "25");
+    assert.equal(await text('#filters [data-status="DONE"] .count'), dashboard ? "1" : "0");
+    assert.equal(await inside("[...document.querySelectorAll('.task-priority .priority-mark')].every(mark => mark.dataset.priority === 'p1')"), true);
+    const first = '.task[data-key="' + (await rowKeys())[0] + '"] .task-priority';
+    await click(first);
+    await click('#status-menu [data-priority="unset"]');
+    await wait(async () => (await rowKeys()).length === count - 1, "edited task leaves the priority filter");
+    await priorityFilter("unset");
+    count = dashboard ? 8 : 6;
+    await pageState(1, 1, "1–" + count, count);
+    assert.equal(await text('#filters [data-status="IN_PROGRESS"] .count'), String(count));
+    await filter("CANCELLED");
+    assert.equal(await text("#empty-tasks-message"), "当前筛选下暂无任务。");
+    await click("#show-all");
+    if (dashboard) await selectProject("B");
+    await filter("IN_PROGRESS");
+    await priorityFilter("p1");
+    await add(dashboard ? "B/new" : "A/new");
+    assert.equal(await inside("document.querySelector('#priority-filters [aria-pressed=true]').dataset.priority"), "all");
+    await pageState(2, 2, dashboard ? "21–22" : "13–18", dashboard ? 22 : 18);
+  }
+  for (const surface of ["dashboard", "project"]) {
+    for (const [parameters, expected] of [
+      ["host=en-US&system=zh-CN", "en"],
+      ["host=zh-Hans&system=en-US", "zh-Hans"],
+      ["system=zh-CN", "zh-Hans"],
+      ["host=ja-JP&system=zh-CN", "en"],
+    ]) {
+      await load(surface + "&" + parameters, 320, 650);
+      assert.equal(await inside("document.documentElement.lang"), expected);
+      assert.equal((await text("#refresh")).trim(), expected === "en" ? "Refresh" : "刷新");
+      assert.equal(await text('#filters [data-status="IN_PROGRESS"]'), expected === "en"
+        ? "In progress" + (surface === "dashboard" ? 37 : 25) : "进行中" + (surface === "dashboard" ? 37 : 25));
+      assert.equal(await text(".task-title"), surface === "dashboard" ? "A task 26" : "A task 1");
+      if (surface === "dashboard") assert.equal(await groupLabels().then(groups => groups[0][0]), "甲项目");
+      await evaluate('post({method:"ui/notifications/host-context-changed",params:{locale:"en"}})');
+      await wait(async () => (await text("#refresh")).trim() === "Refresh", "host locale update");
+      assert.equal(await inside(query("#previous-page") + ".getAttribute('aria-label')"), "Previous page");
+      await click("#add-task");
+      assert.equal(await text("#dialog-heading"), "Add task");
+      await click("#dialog-close");
+      await evaluate('projects[0].tasks.find(task => task.id === (dashboard ? "A26" : "A1")).title = "任务原文";');
+      await click("#refresh");
+      await wait(async () => (await text("#refresh-status")) === "Tasks refreshed.", "English refresh feedback");
+      assert.ok((await inside("[...document.querySelectorAll('.task-title')].map(node => node.textContent)")).includes("任务原文"));
+    }
+  }
   assert.deepEqual(exceptions, []);
-  console.log("PASS Dashboard 与项目侧栏 Chromium 分页。页容量、组顺序与计数、筛选、边界、滚动、键盘、新增聚焦和刷新。");
+  console.log("PASS Dashboard 与项目侧栏 Chromium 分页、优先级菜单、组合筛选、新建任务聚焦、中英文及语言回退。");
 } finally {
   clearTimeout(timeout);
   browser.kill();

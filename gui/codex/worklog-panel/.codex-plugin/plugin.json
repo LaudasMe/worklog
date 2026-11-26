@@ -1,6 +1,6 @@
 {
   "name": "worklog-codex",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "在 Codex 中查看本机 workLog 总览和当前项目。",
   "mcpServers": "./.mcp.json",
   "requires_local_executor": true,
