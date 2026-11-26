@@ -9,6 +9,7 @@ workLog turns information scattered across your chats with an agent into tasks, 
 - **Find action items in chat.** The agent turns agreed work into tasks and to-dos and lists questions that still need a decision.
 - **Track progress by task.** Save results, decisions, updates to to-dos, and next steps under the relevant task. Use the task ID to find its history and evidence of completion later.
 - **Keep project data local.** Each project has its own SQLite database in `.worklog/` at the project root. The CLI can run on its own and provides a read-only interface for other tools.
+- **Bridge task across Agents.** Record your task context, progress and goal independent of agents. Your tasks could be continued from codex to DSH.
 
 ## What's new in GUI 0.2.0 and CLI / Skill v0.5.0
 
